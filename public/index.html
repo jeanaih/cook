@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍳 Cooking NangInamo - Multiplayer Kitchen Chaos!</title>
+    <meta name="description"
+        content="An Overcooked-style isometric 3D cooking battle game. Cook, chop, and serve dishes in a chaotic multiplayer kitchen!">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <!-- ========== LOBBY SCREEN ========== -->
+    <div id="lobby-screen" class="screen active">
+        <div class="lobby-bg"></div>
+        <div class="lobby-container">
+            <div class="logo-container">
+                <h1 class="game-logo">
+                    <span class="logo-icon">🍳</span>
+                    <span class="logo-text">COOKING<br>NANGINAMO</span>
+                    <span class="logo-icon">🔥</span>
+                </h1>
+                <p class="logo-subtitle">Multiplayer Kitchen Chaos!</p>
+            </div>
+
+            <div class="lobby-card">
+                <div class="input-group">
+                    <label for="player-name">Chef Name</label>
+                    <input type="text" id="player-name" placeholder="Enter your chef name..." maxlength="15"
+                        value="Chef">
+                </div>
+
+                <div class="input-group">
+                    <label for="room-code">Kitchen Room ID</label>
+                    <input type="text" id="room-code" placeholder="Room Name (e.g. kitchen_1)" value="kitchen_1">
+                </div>
+
+                <div class="input-row" style="display: flex; gap: 10px; margin-bottom: 16px;">
+                    <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="game-mode">Mode</label>
+                        <select id="game-mode"
+                            style="width: 100%; padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 2px solid var(--border); color: white; font-weight: bold;">
+                            <option value="single">👤 Single Player</option>
+                            <option value="multi_coop">👥 Multi Co-op</option>
+                            <option value="multi_vs">⚔️ Multi VS</option>
+                        </select>
+                    </div>
+                    <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                        <label for="difficulty">Difficulty</label>
+                        <select id="difficulty"
+                            style="width: 100%; padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 2px solid var(--border); color: white; font-weight: bold;">
+                            <option value="easy">🟢 Easy</option>
+                            <option value="hard">🔴 Hard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="btn-join" class="btn-primary">
+                    <span class="btn-icon">👨‍🍳</span>
+                    <span>Start / Join</span>
+                </button>
+
+                <div class="lobby-info">
+                    <p>🟢 <b>Easy:</b> Small Map, 2 Dishes, 4 Ingredients</p>
+                    <p>🔴 <b>Hard:</b> Full Map, 5 Dishes, All Ingredients</p>
+                    <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0;">
+                    <p>🎮 WASD to Move • SPACE to Interact/Chop</p>
+                </div>
+            </div>
+
+            <div class="players-waiting" id="players-waiting">
+                <h3>👥 Chefs in Kitchen</h3>
+                <div id="player-list" class="player-list"></div>
+            </div>
+
+            <button id="btn-start" class="btn-start hidden">
+                <span>🔥 START COOKING! 🔥</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ========== GAME SCREEN ========== -->
+    <div id="game-screen" class="screen">
+        <!-- HUD -->
+        <div id="hud" class="hud">
+            <div class="hud-left">
+                <div class="hud-score" id="hud-score">
+                    <span class="score-label">SCORE</span>
+                    <span class="score-value" id="score-value">0</span>
+                </div>
+                <div class="hud-combo" id="hud-combo">
+                    <span id="combo-value"></span>
+                </div>
+            </div>
+            <div class="hud-center">
+                <div class="hud-timer" id="hud-timer">
+                    <span class="timer-icon">⏱️</span>
+                    <span class="timer-value" id="timer-value">3:00</span>
+                </div>
+            </div>
+            <div class="hud-right">
+                <div class="hud-holding" id="hud-holding">
+                    <span class="holding-label">Holding</span>
+                    <div class="holding-display" id="holding-display">Nothing</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders Bar -->
+        <div class="orders-bar" id="orders-bar">
+            <div class="orders-label">📋 ORDERS</div>
+            <div class="orders-list" id="orders-list"></div>
+        </div>
+
+        <!-- Three.js Canvas -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Notifications -->
+        <div id="notifications" class="notifications"></div>
+
+        <!-- Chat -->
+        <div class="chat-container" id="chat-container">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="Type message..." maxlength="100">
+                <button id="chat-send">💬</button>
+            </div>
+        </div>
+
+        <!-- Recipe Book (toggle) -->
+        <button class="btn-recipe-toggle" id="btn-recipe-toggle">📖</button>
+        <div class="recipe-book hidden" id="recipe-book">
+            <h3>📖 Recipe Book</h3>
+            <div class="recipe-list" id="recipe-list"></div>
+        </div>
+    </div>
+
+    <!-- ========== GAME OVER SCREEN ========== -->
+    <div id="gameover-screen" class="screen">
+        <div class="gameover-container">
+            <h1 class="gameover-title">⏰ Time's Up!</h1>
+            <div class="gameover-score">
+                <div class="final-score" id="final-score">0</div>
+                <div class="score-label-big">Points</div>
+            </div>
+            <div class="gameover-stats" id="gameover-stats"></div>
+            <div class="gameover-players" id="gameover-players"></div>
+            <div class="star-rating" id="star-rating"></div>
+            <button class="btn-primary btn-restart" id="btn-restart">
+                <span>🔄 Play Again!</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/three/build/three.module.js",
+            "three/addons/": "/three/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="/js/game.js"></script>
+</body>
+
+</html>
