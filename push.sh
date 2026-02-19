@@ -1,5 +1,5 @@
 #!/bin/bash
-git config user.name "Jean AIH"
+git config user.name "Jeanaih"
 git config user.email "jeanaih016@gmail.com"
 git init
 git add .

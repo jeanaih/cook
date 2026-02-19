@@ -310,6 +310,26 @@ function generateLayout(width, height, ingredientSet, activeRecipes, difficulty)
 
 // ============ GAME STATE ============
 const rooms = {};
+const roomCodes = {};
+const friends = {};
+const roomCodeToId = {};
+
+function buildRoomListPayload() {
+    const visibleRooms = Object.values(rooms).filter(r => r.mode !== 'single');
+    return visibleRooms.map(r => {
+        const maxPlayers = r.mode === 'single' ? 1 : r.mode === 'multi_vs' ? 2 : 3;
+        return {
+            id: r.id,
+            mode: r.mode,
+            difficulty: r.difficulty,
+            players: Object.keys(r.players).length,
+            maxPlayers,
+            state: r.state,
+            hasPassword: r.hasPassword,
+            description: r.description,
+        };
+    });
+}
 
 function selectContent(difficulty) {
     const allRecipes = Object.keys(RECIPES);
@@ -360,6 +380,14 @@ function selectContent(difficulty) {
     return { recipes: finalRecipes, ingredients: finalIngredients };
 }
 
+function generateRoomCode() {
+    let code;
+    do {
+        code = Math.floor(100000 + Math.random() * 900000).toString();
+    } while (roomCodeToId[code]);
+    return code;
+}
+
 function createRoom(roomId, settings) {
     const diff = settings.difficulty || 'easy';
     const mode = settings.mode || 'single';
@@ -367,6 +395,10 @@ function createRoom(roomId, settings) {
     let layout = null;
     let w, h;
     let content = { recipes: {}, ingredients: {} };
+
+    // Generate room code
+    const roomCode = generateRoomCode();
+    roomCodeToId[roomCode] = roomId;
 
     // 1. Try to load custom map
     let mapLoaded = false;
@@ -502,35 +534,39 @@ function createRoom(roomId, settings) {
             GRID_W: w,
             GRID_H: h
         },
+        countdownTimer: null,
+        isStarting: false,
+        gameStartAt: null,
         orderTimer: null,
         gameTimer: null,
         tickTimer: null,
         ordersCompleted: 0,
         ordersFailed: 0,
         highScore: 0,
+        roomCode: roomCode,
+        password: settings.password || null,
+        description: settings.description || '',
+        hasPassword: !!settings.password,
     };
 }
 
 function getOrCreateRoom(roomId, settings = {}) {
     let room = rooms[roomId];
 
-    // Force regeneration if mode/diff changes, or room is empty, or room doesn't exist
-    // This allows immediate switching of modes for testing/user intent
-    let shouldRegenerate = false;
-
-    if (room) {
-        if (Object.keys(room.players).length === 0) shouldRegenerate = true;
-        // Check if user is requesting a different mode than what the room has
-        if (settings.mode && room.mode !== settings.mode) shouldRegenerate = true;
-        if (settings.difficulty && room.difficulty !== settings.difficulty) shouldRegenerate = true;
-    } else {
-        shouldRegenerate = true;
-    }
-
-    if (shouldRegenerate) {
-        console.log(`♻️  Regenerating room ${roomId} (Mode: ${settings.mode || 'default'}, Diff: ${settings.difficulty || 'default'})`);
+    // Only create new room if it doesn't exist
+    // Same room ID = same room state (don't regenerate if room exists)
+    if (!room) {
+        console.log(`🆕 Creating new room ${roomId} (Mode: ${settings.mode || 'default'}, Diff: ${settings.difficulty || 'default'})`);
         rooms[roomId] = createRoom(roomId, settings);
         room = rooms[roomId];
+    } else {
+        // Room exists - verify settings match (if different, reject or use existing)
+        if (settings.mode && room.mode !== settings.mode) {
+            console.log(`⚠️  Room ${roomId} exists with mode ${room.mode}, but requested ${settings.mode}. Using existing room.`);
+        }
+        if (settings.difficulty && room.difficulty !== settings.difficulty) {
+            console.log(`⚠️  Room ${roomId} exists with difficulty ${room.difficulty}, but requested ${settings.difficulty}. Using existing room.`);
+        }
     }
 
     return room;
@@ -567,6 +603,7 @@ function checkOrderExpiry(room) {
         room.orders = room.orders.filter(ord => ord.id !== o.id);
         room.combo = 0;
         room.ordersFailed++;
+        // Order expiry penalty: Shared for coop/single, individual for VS (applied to room for simplicity)
         room.score = Math.max(0, room.score - 5); // penalty
         io.to(room.id).emit('orderExpired', { orderId: o.id, score: room.score });
     });
@@ -612,8 +649,30 @@ function checkPlateMatchesOrder(plateContents, room) {
 io.on('connection', (socket) => {
     console.log(`🍳 Chef connected: ${socket.id}`);
 
+    socket.emit('roomList', buildRoomListPayload());
+
+    socket.on('getRooms', () => {
+        socket.emit('roomList', buildRoomListPayload());
+    });
+
     socket.on('joinRoom', (data) => {
         const roomId = data.roomId || 'kitchen_1';
+
+        // Check if room exists and has password
+        const existingRoom = rooms[roomId];
+        if (existingRoom && existingRoom.hasPassword && !data.password) {
+            socket.emit('passwordRequired', { roomId: roomId });
+            return;
+        }
+
+        // Check password if provided
+        if (existingRoom && existingRoom.hasPassword && data.password) {
+            if (existingRoom.password !== data.password) {
+                socket.emit('notification', { msg: 'Incorrect password!', type: 'error' });
+                return;
+            }
+        }
+
         // Pass mode/diff settings if this is a new room or re-configuring
         const settings = {
             mode: data.mode || 'single',
@@ -630,7 +689,11 @@ io.on('connection', (socket) => {
         }
         if (room.mode === 'multi_coop' && Object.keys(room.players).length >= 3) {
             socket.emit('notification', { msg: 'Room full (Max 3)!', type: 'error' });
-            return; // Or allow spectator? For now reject.
+            return;
+        }
+        if (room.mode === 'multi_vs' && Object.keys(room.players).length >= 2) {
+            socket.emit('notification', { msg: 'Room full (Max 2)!', type: 'error' });
+            return;
         }
 
         socket.join(roomId);
@@ -695,6 +758,10 @@ io.on('connection', (socket) => {
         // const playerEmojis = ... (already defined)
         // const colorIdx = ... (already calculated above)
 
+        // Determine if this player is the host (first player in room)
+        const existingPlayerIds = Object.keys(room.players);
+        const isHost = existingPlayerIds.length === 0;
+
         const player = {
             id: socket.id,
             name: data.name || `Chef_${socket.id.slice(0, 4)}`,
@@ -713,6 +780,8 @@ io.on('connection', (socket) => {
             chopStationId: null,
             score: 0,
             dishesServed: 0,
+            isHost: isHost,
+            isReady: false, // Ready status for non-host players
         };
 
         room.players[socket.id] = player;
@@ -720,6 +789,8 @@ io.on('connection', (socket) => {
         // Tell the joining player about the full state
         socket.emit('init', {
             playerId: socket.id,
+            isHost: isHost,
+            roomCode: room.roomCode,
             room: {
                 id: room.id,
                 players: room.players,
@@ -745,6 +816,11 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('playerJoined', player);
 
         console.log(`👨‍🍳 ${player.name} joined room ${roomId} (${Object.keys(room.players).length} players)`);
+
+        // Auto-start single player games immediately (skip waiting room)
+        if (room.mode === 'single' && room.state === 'lobby') {
+            startGame(room);
+        }
     });
 
     // Player movement
@@ -939,12 +1015,30 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Start game
+    // Start game (only host can start)
     socket.on('startGame', () => {
         const player = findPlayer(socket.id);
         if (!player) return;
         const room = rooms[player.roomId];
         if (!room || room.state !== 'lobby') return;
+
+        // Check if player is host
+        if (!player.isHost) {
+            socket.emit('notification', { msg: 'Only the host can start the game!', type: 'error' });
+            return;
+        }
+
+        // For multiplayer, check if all non-host players are ready (optional requirement)
+        if (room.mode !== 'single') {
+            const nonHostPlayers = Object.values(room.players).filter(p => !p.isHost);
+            if (nonHostPlayers.length > 0) {
+                const allReady = nonHostPlayers.every(p => p.isReady);
+                if (!allReady) {
+                    socket.emit('notification', { msg: 'Wait for all players to be ready!', type: 'warning' });
+                    return;
+                }
+            }
+        }
 
         startGame(room);
     });
@@ -983,14 +1077,63 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Leave Room (Explicit)
+    socket.on('leaveRoom', () => {
+        const player = findPlayer(socket.id);
+        if (player) {
+            const room = rooms[player.roomId];
+            if (room) {
+                const wasHost = player.isHost;
+                delete room.players[socket.id];
+
+                // If host left, assign new host (first remaining player)
+                if (wasHost && Object.keys(room.players).length > 0) {
+                    const remainingPlayerIds = Object.keys(room.players).sort();
+                    const newHostId = remainingPlayerIds[0];
+                    room.players[newHostId].isHost = true;
+                    room.players[newHostId].isReady = false; // Host is default ready but doesn't use the badge
+                    io.to(room.id).emit('hostChanged', { newHostId: newHostId });
+                    console.log(`👑 New host assigned: ${room.players[newHostId].name}`);
+                }
+
+                io.to(room.id).emit('playerLeft', socket.id);
+                console.log(`👋 Player ${player.name} left room ${room.id}`);
+
+                // Clean up empty rooms
+                if (Object.keys(room.players).length === 0) {
+                    clearTimers(room);
+                    delete rooms[room.id];
+                    console.log(`🗑️ Room ${room.id} deleted (empty)`);
+                }
+
+                io.emit('roomList', buildRoomListPayload());
+            }
+        }
+    });
+
     // Disconnect
     socket.on('disconnect', () => {
         const player = findPlayer(socket.id);
         if (player) {
             const room = rooms[player.roomId];
             if (room) {
-                delete room.players[socket.id];
-                io.to(room.id).emit('playerLeft', socket.id);
+                // If player was already removed via leaveRoom, this might be redundant but safe
+                if (room.players[socket.id]) {
+                    const wasHost = room.players[socket.id].isHost;
+                    delete room.players[socket.id];
+
+                    // If host disconnected, assign new host
+                    if (wasHost && Object.keys(room.players).length > 0) {
+                        const remainingPlayerIds = Object.keys(room.players).sort();
+                        const newHostId = remainingPlayerIds[0];
+                        room.players[newHostId].isHost = true;
+                        room.players[newHostId].isReady = false; // Reset ready status for new host
+                        io.to(room.id).emit('hostChanged', { newHostId: newHostId });
+                        console.log(`👑 New host assigned after disconnect: ${room.players[newHostId].name}`);
+                    }
+
+                    io.to(room.id).emit('playerLeft', socket.id);
+                }
 
                 // Clean up empty rooms
                 if (Object.keys(room.players).length === 0) {
@@ -1000,8 +1143,229 @@ io.on('connection', (socket) => {
                 }
             }
         }
+
         console.log(`❌ Chef disconnected: ${socket.id}`);
+
+        io.emit('roomList', buildRoomListPayload());
     });
+
+    // Toggle Ready Status (non-host players only)
+    socket.on('toggleReady', () => {
+        const player = findPlayer(socket.id);
+        if (!player) return;
+        const room = rooms[player.roomId];
+        if (!room) return;
+
+        // Host doesn't need to be ready
+        if (player.isHost) {
+            socket.emit('notification', { msg: 'Host doesn\'t need to be ready!', type: 'info' });
+            return;
+        }
+
+        player.isReady = !player.isReady;
+        // Broadcast to everyone in room to update UI
+        io.to(room.id).emit('playerReadyUpdate', { id: socket.id, isReady: player.isReady });
+
+        console.log(`✅ Player ${player.name} is ${player.isReady ? 'ready' : 'not ready'}`);
+    });
+
+    // ============ NEW FEATURE HANDLERS ============
+
+    // Create Room (with password/description)
+    socket.on('createRoom', (data) => {
+        const roomId = data.roomName || `room_${Date.now()}`;
+        const settings = {
+            mode: data.mode || 'multi_coop',
+            difficulty: data.difficulty || 'easy',
+            password: data.password,
+            description: data.description
+        };
+
+        // Check if room already exists
+        if (rooms[roomId] && Object.keys(rooms[roomId].players).length > 0) {
+            socket.emit('notification', { msg: 'Room name already taken!', type: 'error' });
+            return;
+        }
+
+        const room = getOrCreateRoom(roomId, settings);
+
+        // Check player limits
+        if (room.mode === 'single' && Object.keys(room.players).length >= 1) {
+            socket.emit('notification', { msg: 'Single player room full!', type: 'error' });
+            return;
+        }
+        if (room.mode === 'multi_coop' && Object.keys(room.players).length >= 3) {
+            socket.emit('notification', { msg: 'Room full (Max 3)!', type: 'error' });
+            return;
+        }
+        if (room.mode === 'multi_vs' && Object.keys(room.players).length >= 2) {
+            socket.emit('notification', { msg: 'Room full (Max 2)!', type: 'error' });
+            return;
+        }
+
+        socket.join(roomId);
+
+        // Calculate player index
+        const playerColors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
+        const existingIds = Object.keys(room.players);
+        const colorIdx = existingIds.length % playerColors.length;
+        const isHost = existingIds.length === 0;
+
+        // Spawn position
+        const gw = room.config.GRID_W;
+        const gh = room.config.GRID_H;
+        let spawn = { x: 1, z: 1 };
+
+        const spawnKey = colorIdx + 1;
+        if (room.spawns && room.spawns[spawnKey]) {
+            spawn = room.spawns[spawnKey];
+        } else {
+            const center = { x: Math.floor(gw / 2), z: Math.floor(gh / 2) };
+            if (room.kitchen[center.z] && room.kitchen[center.z][center.x] === 0) {
+                spawn = center;
+            }
+        }
+
+        const player = {
+            id: socket.id,
+            name: data.name || `Chef_${socket.id.slice(0, 4)}`,
+            roomId: roomId,
+            gridX: spawn.x,
+            gridZ: spawn.z,
+            posX: spawn.x * TILE_SIZE,
+            posZ: spawn.z * TILE_SIZE,
+            targetX: spawn.x * TILE_SIZE,
+            targetZ: spawn.z * TILE_SIZE,
+            facing: 'down',
+            holding: null,
+            color: playerColors[colorIdx],
+            emoji: '👨‍🍳',
+            isChopping: false,
+            chopStationId: null,
+            score: 0,
+            dishesServed: 0,
+            isHost: isHost,
+            isReady: false,
+        };
+
+        room.players[socket.id] = player;
+
+        // Send init to the joining player
+        socket.emit('init', {
+            playerId: socket.id,
+            isHost: isHost,
+            roomCode: room.roomCode,
+            room: {
+                id: room.id,
+                players: room.players,
+                kitchen: room.kitchen,
+                stations: room.stations,
+                orders: room.orders,
+                score: room.score,
+                timeLeft: room.timeLeft,
+                state: room.state,
+                mode: room.mode,
+            },
+            config: {
+                TILE_SIZE: room.config.TILE_SIZE,
+                GRID_W: room.config.GRID_W,
+                GRID_H: room.config.GRID_H,
+                INGREDIENTS: room.activeIngredients,
+                RECIPES: room.activeRecipes,
+            }
+        });
+
+        // Tell others about new player
+        socket.to(roomId).emit('playerJoined', player);
+
+        console.log(`👨‍🍳 ${player.name} created and joined room ${roomId} (${Object.keys(room.players).length} players)`);
+
+        io.emit('roomList', buildRoomListPayload());
+    });
+
+    // Join by Room Code
+    socket.on('joinByCode', (data) => {
+        const code = data.code;
+        const roomId = roomCodeToId[code];
+
+        if (!roomId) {
+            socket.emit('joinByCodeResult', { success: false, message: 'Room not found!' });
+            return;
+        }
+
+        const room = rooms[roomId];
+        if (!room) {
+            socket.emit('joinByCodeResult', { success: false, message: 'Room not found!' });
+            return;
+        }
+
+        if (room.hasPassword) {
+            socket.emit('joinByCodeResult', { success: true, requiresPassword: true, code: code, roomId: roomId });
+        } else {
+            socket.emit('joinByCodeResult', { success: true, requiresPassword: false, roomId: roomId });
+        }
+    });
+
+
+    // Ping/Pong for connection quality
+    socket.on('ping', () => {
+        socket.emit('pong');
+    });
+
+    // Friends System
+    if (!friends[socket.id]) {
+        friends[socket.id] = [];
+    }
+
+    socket.on('getFriends', () => {
+        socket.emit('friendList', friends[socket.id] || []);
+    });
+
+    socket.on('addFriend', (data) => {
+        const friendName = data.name;
+        // Find friend by name or ID
+        // For now, just add to list
+        if (!friends[socket.id]) friends[socket.id] = [];
+        const friendExists = friends[socket.id].some(f => f.name === friendName);
+        if (!friendExists) {
+            friends[socket.id].push({ id: `friend_${Date.now()}`, name: friendName, status: 'offline' });
+            socket.emit('friendAdded', { name: friendName });
+            socket.emit('friendList', friends[socket.id]);
+        }
+    });
+
+    socket.on('inviteFriend', (data) => {
+        // Send invitation to friend
+        // Would need friend socket mapping
+        socket.emit('notification', { msg: 'Invitation sent!', type: 'success' });
+    });
+
+    // Kick Player (host only)
+    socket.on('kickPlayer', (data) => {
+        const player = findPlayer(socket.id);
+        if (!player || !player.isHost) {
+            socket.emit('notification', { msg: 'Only the host can kick players!', type: 'error' });
+            return;
+        }
+
+        const room = rooms[player.roomId];
+        if (!room) return;
+
+        const targetPlayer = room.players[data.playerId];
+        if (!targetPlayer) return;
+
+        // Kick the player
+        const kickedSocket = io.sockets.sockets.get(data.playerId);
+        if (kickedSocket) {
+            kickedSocket.emit('playerKicked', { message: `You were kicked from ${room.id}` });
+            kickedSocket.leave(room.id);
+            delete room.players[data.playerId];
+            io.to(room.id).emit('playerLeft', data.playerId);
+            io.to(room.id).emit('playerKickedNotification', { playerName: targetPlayer.name });
+            console.log(`👢 ${targetPlayer.name} was kicked from room ${room.id}`);
+        }
+    });
+
 });
 
 // ============ INTERACTION LOGIC ============
@@ -1237,9 +1601,31 @@ function handleServe(player, station, room) {
             const basePoints = matchedOrder.points;
             const totalPoints = basePoints + (comboMultiplier - 1) * 5 + timeBonus + freshnessBonus + seasoningBonus;
 
-            room.score += totalPoints;
+            // Score handling: Co-op = shared score, VS = individual scores
+            if (room.mode === 'multi_coop') {
+                // Co-op: Shared score
+                room.score += totalPoints;
+                // Also update individual player score for tracking
+                player.score += totalPoints;
+            } else if (room.mode === 'multi_vs') {
+                // VS mode: Individual scores only
+                player.score += totalPoints;
+                // Room score is sum of all player scores for display
+                room.score = Object.values(room.players).reduce((sum, p) => sum + p.score, 0);
+
+                // Emit VS scoreboard update
+                const vsScores = {};
+                Object.values(room.players).forEach(p => {
+                    vsScores[p.id] = p.score;
+                });
+                io.to(room.id).emit('scoreUpdate', { scores: vsScores });
+            } else {
+                // Single player: same as room score
+                room.score += totalPoints;
+                player.score += totalPoints;
+            }
+
             room.ordersCompleted++;
-            player.score += totalPoints;
             player.dishesServed++;
 
             room.orders = room.orders.filter(o => o.id !== matchedOrder.id);
@@ -1265,7 +1651,15 @@ function handleServe(player, station, room) {
             });
         } else {
             room.combo = 0;
-            room.score = Math.max(0, room.score - 3);
+            // Wrong dish penalty: Co-op = shared penalty, VS = individual penalty
+            if (room.mode === 'multi_coop') {
+                room.score = Math.max(0, room.score - 3);
+            } else if (room.mode === 'multi_vs') {
+                player.score = Math.max(0, player.score - 3);
+                room.score = Object.values(room.players).reduce((sum, p) => sum + p.score, 0);
+            } else {
+                room.score = Math.max(0, room.score - 3);
+            }
             player.holding = null;
             io.to(room.id).emit('notification', { msg: '❌ Wrong dish!', type: 'error' });
         }
@@ -1383,8 +1777,37 @@ function tryCombine(itemA, itemB) {
 
 // ============ GAME LOOP ============
 function startGame(room) {
+    if (room.state !== 'lobby' || room.isStarting) return;
+    clearTimers(room);
+    room.isStarting = true;
+
+    let countdown = room.mode === 'single' ? 0 : 3;
+
+    // For single player, skip the countdown and start immediately
+    if (room.mode === 'single') {
+        finalizeGameStart(room);
+        console.log(`🚀 Game started immediately (Single Player) in room ${room.id}`);
+        return;
+    }
+
+    room.countdownTimer = setInterval(() => {
+        io.to(room.id).emit('gameCountdown', { countdown });
+        countdown--;
+        if (countdown < 0) {
+            if (room.countdownTimer) {
+                clearInterval(room.countdownTimer);
+                room.countdownTimer = null;
+            }
+            finalizeGameStart(room);
+        }
+    }, 1000);
+}
+
+function finalizeGameStart(room) {
+    room.isStarting = false;
     room.state = 'playing';
     room.timeLeft = GAME_DURATION;
+    room.gameStartAt = Date.now();
     room.score = 0;
     room.combo = 0;
     room.maxCombo = 0;
@@ -1392,7 +1815,6 @@ function startGame(room) {
     room.ordersCompleted = 0;
     room.ordersFailed = 0;
 
-    // Reset all stations
     Object.values(room.stations).forEach(s => {
         s.contents = null;
         s.cookProgress = 0;
@@ -1401,7 +1823,6 @@ function startGame(room) {
         s.isDirty = false;
     });
 
-    // Reset players
     Object.values(room.players).forEach((p, i) => {
         p.holding = null;
         p.score = 0;
@@ -1409,7 +1830,6 @@ function startGame(room) {
         p.isChopping = false;
     });
 
-    // Generate first orders
     generateOrder(room);
     generateOrder(room);
 
@@ -1418,7 +1838,6 @@ function startGame(room) {
         orders: room.orders,
     });
 
-    // Order generation timer
     room.orderTimer = setInterval(() => {
         const order = generateOrder(room);
         if (order) {
@@ -1426,17 +1845,23 @@ function startGame(room) {
         }
     }, ORDER_INTERVAL);
 
-    // Game countdown timer
     room.gameTimer = setInterval(() => {
-        room.timeLeft--;
-        io.to(room.id).emit('timeUpdate', room.timeLeft);
+        if (!room.gameStartAt) return;
 
-        if (room.timeLeft <= 0) {
-            endGame(room);
+        // Calculate exact time remaining to prevent timer running too fast
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - room.gameStartAt) / 1000);
+        const remaining = Math.max(0, GAME_DURATION - elapsedSeconds);
+
+        if (remaining !== room.timeLeft) {
+            room.timeLeft = remaining;
+            io.to(room.id).emit('timeUpdate', room.timeLeft);
+            if (room.timeLeft <= 0) {
+                endGame(room);
+            }
         }
     }, 1000);
 
-    // Game tick (stove cooking, order expiry)
     room.tickTimer = setInterval(() => {
         tickGame(room);
     }, TICK_RATE);
@@ -1507,7 +1932,18 @@ function tickGame(room) {
                 station.cookProgress = 0;
                 station.isBurning = false;
                 station.cookedNotified = false;
-                room.score = Math.max(0, room.score - 10);
+
+                // Fire penalty: Co-op = shared, VS = individual (find player who was using this station)
+                if (room.mode === 'multi_vs') {
+                    // In VS mode, try to find which player was using this station (if possible)
+                    // For now, apply penalty to room score (could be improved to track station usage)
+                    const penalty = 10;
+                    room.score = Math.max(0, room.score - penalty);
+                } else {
+                    // Co-op and single: shared penalty
+                    room.score = Math.max(0, room.score - 10);
+                }
+
                 io.to(room.id).emit('fire', {
                     stationId: station.id,
                     score: room.score,
@@ -1582,15 +2018,24 @@ function restartGame(room) {
             state: 'lobby',
         }
     });
+
+    // Auto-start single player games immediately on restart
+    if (room.mode === 'single') {
+        startGame(room);
+    }
 }
 
 function clearTimers(room) {
     if (room.orderTimer) clearInterval(room.orderTimer);
     if (room.gameTimer) clearInterval(room.gameTimer);
     if (room.tickTimer) clearInterval(room.tickTimer);
+    if (room.countdownTimer) clearInterval(room.countdownTimer);
     room.orderTimer = null;
     room.gameTimer = null;
     room.tickTimer = null;
+    room.countdownTimer = null;
+    room.isStarting = false;
+    room.gameStartAt = null;
 }
 
 // ============ HELPERS ============

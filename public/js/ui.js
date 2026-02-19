@@ -12,14 +12,27 @@ export class UIManager {
     }
 
     updatePlayerList(players) {
-        const list = document.getElementById('player-list');
+        let list = document.getElementById('player-list');
+        if (!list) {
+            // Create a player list container in the HUD if it doesn't exist
+            const hudCenter = document.querySelector('.hud-center');
+            if (hudCenter) {
+                list = document.createElement('div');
+                list.id = 'player-list';
+                list.className = 'hud-players';
+                hudCenter.appendChild(list);
+            } else {
+                return; // Can't find a place to put it
+            }
+        }
+
         list.innerHTML = '';
         Object.values(players).forEach(p => {
             const tag = document.createElement('div');
             tag.className = 'player-tag';
             tag.style.borderColor = p.color;
             tag.style.background = `${p.color}22`;
-            tag.textContent = `${p.emoji || '👨‍🍳'} ${p.name}`;
+            tag.innerHTML = `<i class="bi bi-person-fill"></i> ${p.name}`;
             list.appendChild(tag);
         });
     }
@@ -30,25 +43,28 @@ export class UIManager {
         Object.entries(this.config.RECIPES).forEach(([key, r]) => {
             const item = document.createElement('div');
             item.className = 'recipe-item';
-            const ings = r.ingredients.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ');
+            const ings = r.ingredients.map(i => {
+                const ing = this.config.INGREDIENTS[i];
+                return ing?.emoji ? `<span title="${ing.name}">${ing.emoji}</span>` : i;
+            }).join(' ');
             const chops = r.requiresChopping && r.requiresChopping.length > 0
-                ? `<br>🔪 Chop: ${r.requiresChopping.map(i => this.config.INGREDIENTS[i]?.emoji).join(' ')}`
+                ? `<br><i class="bi bi-scissors"></i> Chop: ${r.requiresChopping.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
             const rolls = r.requiresRolling && r.requiresRolling.length > 0
-                ? `<br>🔄 Roll: ${r.requiresRolling.map(i => this.config.INGREDIENTS[i]?.emoji).join(' ')}`
+                ? `<br><i class="bi bi-arrow-repeat"></i> Roll: ${r.requiresRolling.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
             const cooks = r.requiresCooking && r.requiresCooking.length > 0
-                ? `<br>🔥 Cook: ${r.requiresCooking.map(i => this.config.INGREDIENTS[i]?.emoji).join(' ')}`
+                ? `<br><i class="bi bi-fire"></i> Cook: ${r.requiresCooking.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
 
             // Build process steps for pizza-like recipes
             let process = '';
             if (r.requiresRolling && r.requiresRolling.length > 0) {
-                process = `<div class="recipe-process">📋 Process: Roll → Plate → Add toppings → Oven</div>`;
+                process = `<div class="recipe-process"><i class="bi bi-list-check"></i> Process: Roll → Plate → Add toppings → Oven</div>`;
             }
 
             item.innerHTML = `
-                <div class="recipe-item-emoji">${r.emoji}</div>
+                <div class="recipe-item-emoji">${r.emoji || '<i class="bi bi-egg-fried"></i>'}</div>
                 <div class="recipe-item-info">
                     <div class="recipe-item-name">${r.name}</div>
                     <div class="recipe-item-ings">${ings}${chops}${rolls}${cooks}</div>
@@ -78,13 +94,13 @@ export class UIManager {
 
             const ings = recipe.ingredients.map(i => config.INGREDIENTS[i]?.emoji || '').join('');
             card.innerHTML = `
-                <span class="order-emoji">${recipe.emoji}</span>
+                <span class="order-emoji">${recipe.emoji || '<i class="bi bi-egg-fried"></i>'}</span>
                 <div class="order-name">${recipe.name}</div>
                 <div class="order-ingredients">${ings}</div>
                 <div class="order-timer-bar">
                     <div class="order-timer-fill ${pct < 30 ? 'low' : ''}" style="width:${pct}%"></div>
                 </div>
-                <div class="order-points">+${order.points} pts</div>
+                <div class="order-points"><i class="bi bi-star-fill"></i> +${order.points} pts</div>
             `;
             list.appendChild(card);
         });
@@ -113,7 +129,7 @@ export class UIManager {
         document.getElementById('score-value').textContent = score;
         const comboEl = document.getElementById('combo-value');
         if (combo > 1) {
-            comboEl.textContent = `🔥 x${combo} COMBO!`;
+            comboEl.innerHTML = `<i class="bi bi-fire"></i> x${combo} COMBO!`;
         } else {
             comboEl.textContent = '';
         }
@@ -138,17 +154,17 @@ export class UIManager {
         if (holding.type === 'ingredient') {
             const ing = config.INGREDIENTS[holding.name];
             const status = [];
-            if (holding.chopped) status.push('✂️');
-            if (holding.cooked) status.push('🔥');
+            if (holding.chopped) status.push('<i class="bi bi-scissors"></i>');
+            if (holding.cooked) status.push('<i class="bi bi-fire"></i>');
             el.innerHTML = `${ing?.emoji || '?'} ${ing?.name || holding.name} ${status.join('')}`;
             el.style.color = ing?.color || '#fff';
         } else if (holding.type === 'plate') {
             if (holding.ingredients.length === 0) {
-                el.textContent = '🍽️ Empty Plate';
+                el.innerHTML = '<i class="bi bi-circle"></i> Empty Plate';
                 el.style.color = '#f0f0f0';
             } else {
                 const ings = holding.ingredients.map(i => config.INGREDIENTS[i]?.emoji || i).join('');
-                el.innerHTML = `🍽️ ${ings}`;
+                el.innerHTML = `<i class="bi bi-circle-fill"></i> ${ings}`;
                 el.style.color = '#f0f0f0';
             }
         }
@@ -197,7 +213,7 @@ export class UIManager {
         const playersEl = document.getElementById('gameover-players');
         playersEl.innerHTML = data.players.map(p => `
             <div class="player-tag" style="border-color:${p.color};background:${p.color}22;margin:4px">
-                👨‍🍳 ${p.name}: ${p.score} pts (${p.dishesServed} dishes)
+                <i class="bi bi-person-fill"></i> ${p.name}: ${p.score} pts (${p.dishesServed} dishes)
             </div>
         `).join('');
 
@@ -208,7 +224,7 @@ export class UIManager {
         for (let i = 0; i < 3; i++) {
             const span = document.createElement('span');
             span.className = `star ${i < numStars ? '' : 'star-empty'}`;
-            span.textContent = '⭐';
+            span.innerHTML = '<i class="bi bi-star-fill"></i>';
             stars.appendChild(span);
         }
     }

@@ -4,13 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🍳 Cooking NangInamo - Multiplayer Kitchen Chaos!</title>
+    <title>Cooking NangInamo - Multiplayer Kitchen Chaos!</title>
     <meta name="description"
         content="An Overcooked-style isometric 3D cooking battle game. Cook, chop, and serve dishes in a chaotic multiplayer kitchen!">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link
         href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800;900&display=swap"
         rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 
@@ -21,66 +22,243 @@
         <div class="lobby-container">
             <div class="logo-container">
                 <h1 class="game-logo">
-                    <span class="logo-icon">🍳</span>
+                    <i class="bi bi-egg-fried logo-icon"></i>
                     <span class="logo-text">COOKING<br>NANGINAMO</span>
-                    <span class="logo-icon">🔥</span>
+                    <i class="bi bi-fire logo-icon"></i>
                 </h1>
                 <p class="logo-subtitle">Multiplayer Kitchen Chaos!</p>
             </div>
 
-            <div class="lobby-card">
-                <div class="input-group">
-                    <label for="player-name">Chef Name</label>
-                    <input type="text" id="player-name" placeholder="Enter your chef name..." maxlength="15"
-                        value="Chef">
-                </div>
+            <!-- NAME INPUT (Always visible on top of menus) -->
+            <div class="name-input-container">
+                <label for="player-name"><i class="bi bi-person"></i> YOUR CHEF NAME</label>
+                <input type="text" id="player-name" placeholder="Enter Name..." maxlength="12" value="Chef">
+            </div>
 
-                <div class="input-group">
-                    <label for="room-code">Kitchen Room ID</label>
-                    <input type="text" id="room-code" placeholder="Room Name (e.g. kitchen_1)" value="kitchen_1">
-                </div>
+            <!-- CONNECTION STATUS -->
+            <div id="connection-status" class="connection-status">
+                <i class="bi bi-wifi"></i> <span id="connection-text">Connecting...</span>
+            </div>
 
-                <div class="input-row" style="display: flex; gap: 10px; margin-bottom: 16px;">
-                    <div class="input-group" style="flex: 1; margin-bottom: 0;">
-                        <label for="game-mode">Mode</label>
-                        <select id="game-mode"
-                            style="width: 100%; padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 2px solid var(--border); color: white; font-weight: bold;">
-                            <option value="single">👤 Single Player</option>
-                            <option value="multi_coop">👥 Multi Co-op</option>
-                            <option value="multi_vs">⚔️ Multi VS</option>
-                        </select>
+            <!-- MENU 1: MAIN MENU -->
+            <div id="menu-main" class="lobby-menu active">
+                <button class="menu-btn" onclick="showMenu('single')">
+                    <i class="bi bi-person-fill btn-icon"></i>
+                    <div class="btn-text">
+                        <span class="btn-title">Single Player</span>
+                        <span class="btn-desc">Practice offline</span>
                     </div>
-                    <div class="input-group" style="flex: 1; margin-bottom: 0;">
-                        <label for="difficulty">Difficulty</label>
-                        <select id="difficulty"
-                            style="width: 100%; padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.3); border: 2px solid var(--border); color: white; font-weight: bold;">
-                            <option value="easy">🟢 Easy</option>
-                            <option value="hard">🔴 Hard</option>
-                        </select>
-                    </div>
-                </div>
-
-                <button id="btn-join" class="btn-primary">
-                    <span class="btn-icon">👨‍🍳</span>
-                    <span>Start / Join</span>
                 </button>
+                <button class="menu-btn" onclick="showMenu('create')">
+                    <i class="bi bi-house-door-fill btn-icon"></i>
+                    <div class="btn-text">
+                        <span class="btn-title">Create Lobby</span>
+                        <span class="btn-desc">Host a new game</span>
+                    </div>
+                </button>
+                <button class="menu-btn" onclick="showMenu('join')">
+                    <i class="bi bi-search btn-icon"></i>
+                    <div class="btn-text">
+                        <span class="btn-title">Join Room</span>
+                        <span class="btn-desc">Browse servers</span>
+                    </div>
+                </button>
+                <button class="menu-btn" onclick="showMenu('friends')">
+                    <i class="bi bi-people-fill btn-icon"></i>
+                    <div class="btn-text">
+                        <span class="btn-title">Friends</span>
+                        <span class="btn-desc">Manage friends</span>
+                    </div>
+                </button>
+            </div>
 
-                <div class="lobby-info">
-                    <p>🟢 <b>Easy:</b> Small Map, 2 Dishes, 4 Ingredients</p>
-                    <p>🔴 <b>Hard:</b> Full Map, 5 Dishes, All Ingredients</p>
-                    <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0;">
-                    <p>🎮 WASD to Move • SPACE to Interact/Chop</p>
+            <!-- MENU 2: SINGLE PLAYER SETUP -->
+            <div id="menu-single" class="lobby-menu hidden">
+                <h2 class="menu-title">Select Difficulty</h2>
+                <div class="banner-options">
+                    <div class="banner-option" onclick="selectDifficulty('easy', this)">
+                        <i class="bi bi-circle-fill banner-icon" style="color: #2ecc71;"></i>
+                        <h3>Easy</h3>
+                        <p>Relaxed cooking</p>
+                    </div>
+                    <div class="banner-option" onclick="selectDifficulty('hard', this)">
+                        <i class="bi bi-circle-fill banner-icon" style="color: #e74c3c;"></i>
+                        <h3>Hard</h3>
+                        <p>Chaotic kitchen!</p>
+                    </div>
+                </div>
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i>
+                        Back</button>
+                    <button id="btn-start-single" class="btn-primary"><i class="bi bi-play-fill"></i> Start
+                        Game</button>
                 </div>
             </div>
 
-            <div class="players-waiting" id="players-waiting">
-                <h3>👥 Chefs in Kitchen</h3>
-                <div id="player-list" class="player-list"></div>
+            <!-- MENU 3: CREATE LOBBY -->
+            <div id="menu-create" class="lobby-menu hidden">
+                <h2 class="menu-title">Lobby Settings</h2>
+                <label class="section-label">Game Mode</label>
+                <div class="banner-options">
+                    <div class="banner-option" onclick="selectMode('multi_coop', this)">
+                        <i class="bi bi-people-fill banner-icon"></i>
+                        <h3>Co-op</h3>
+                        <p>Cook together (Max 3)</p>
+                    </div>
+                    <div class="banner-option" onclick="selectMode('multi_vs', this)">
+                        <i class="bi bi-sword banner-icon"></i>
+                        <h3>Versus</h3>
+                        <p>Battle! (Max 2)</p>
+                    </div>
+                </div>
+
+                <label class="section-label" style="margin-top: 15px;">Difficulty</label>
+                <div class="difficulty-toggle">
+                    <button class="diff-btn active" onclick="setCreateDiff('easy', this)">Easy</button>
+                    <button class="diff-btn" onclick="setCreateDiff('hard', this)">Hard</button>
+                </div>
+
+                <div class="input-group" style="margin-top: 15px;">
+                    <label><i class="bi bi-house"></i> Room Name</label>
+                    <input type="text" id="create-room-name" placeholder="e.g. MyKitchen">
+                </div>
+
+                <div class="input-group" style="margin-top: 15px;">
+                    <label><i class="bi bi-file-text"></i> Room Description (Optional)</label>
+                    <input type="text" id="create-room-desc" placeholder="Describe your room...">
+                </div>
+
+                <div class="input-group" style="margin-top: 15px;">
+                    <label>
+                        <input type="checkbox" id="create-room-password-check" onchange="togglePasswordField()">
+                        <i class="bi bi-lock"></i> Password Protected
+                    </label>
+                    <input type="password" id="create-room-password" placeholder="Room password"
+                        style="display:none; margin-top:8px;">
+                </div>
+
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i>
+                        Back</button>
+                    <button id="btn-create-lobby" class="btn-primary"><i class="bi bi-plus-circle"></i> Create</button>
+                </div>
             </div>
 
-            <button id="btn-start" class="btn-start hidden">
-                <span>🔥 START COOKING! 🔥</span>
-            </button>
+            <!-- MENU 4: JOIN ROOM (BROWSER) -->
+            <div id="menu-join" class="lobby-menu hidden">
+                <h2 class="menu-title">Server Browser</h2>
+
+                <!-- JOIN BY CODE -->
+                <div class="join-code-section">
+                    <label><i class="bi bi-key"></i> Join by Room Code</label>
+                    <div class="join-code-input">
+                        <input type="text" id="join-room-code" placeholder="Enter 6-digit code" maxlength="6"
+                            pattern="[0-9]{6}">
+                        <button class="btn-sm" onclick="joinByCode()"><i class="bi bi-arrow-right"></i></button>
+                    </div>
+                </div>
+
+                <!-- FILTERS -->
+                <div class="server-filters">
+                    <select id="filter-mode" onchange="applyFilters()">
+                        <option value="">All Modes</option>
+                        <option value="multi_coop">Co-op</option>
+                        <option value="multi_vs">VS</option>
+                    </select>
+                    <select id="filter-difficulty" onchange="applyFilters()">
+                        <option value="">All Difficulties</option>
+                        <option value="easy">Easy</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                    <button class="btn-sm" onclick="clearFilters()"><i class="bi bi-x-circle"></i> Clear</button>
+                </div>
+
+                <div class="server-list-container">
+                    <table class="server-table">
+                        <thead>
+                            <tr>
+                                <th>Room Name</th>
+                                <th>Mode</th>
+                                <th>Players</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="server-list-body">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Loading rooms...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i>
+                        Back</button>
+                    <button class="btn-refresh" onclick="refreshServerList()"><i class="bi bi-arrow-clockwise"></i>
+                        Refresh</button>
+                </div>
+            </div>
+
+            <!-- MENU 5: FRIENDS -->
+            <div id="menu-friends" class="lobby-menu hidden">
+                <h2 class="menu-title"><i class="bi bi-people-fill"></i> Friends</h2>
+                <div class="friends-section">
+                    <div class="add-friend-section">
+                        <input type="text" id="add-friend-input" placeholder="Enter friend's name or ID">
+                        <button class="btn-sm" onclick="addFriend()"><i class="bi bi-person-plus"></i> Add</button>
+                    </div>
+                    <div id="friends-list" class="friends-list">
+                        <p style="text-align:center; color:var(--text-dim);">No friends yet</p>
+                    </div>
+                </div>
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i>
+                        Back</button>
+                </div>
+            </div>
+
+            <!-- WAITING ROOM (After joining/creating) -->
+            <div id="menu-waiting" class="lobby-menu hidden">
+                <h2 class="menu-title" id="waiting-room-name">Room: ...</h2>
+                <div id="room-code-display" class="room-code-display">
+                    <label>Room Code:</label>
+                    <div class="room-code-value" id="room-code-value">------</div>
+                    <button class="btn-sm" onclick="copyRoomCode()"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+
+                <div id="room-info" class="room-info">
+                    <div class="info-item"><i class="bi bi-info-circle"></i> <span id="room-mode-display"></span></div>
+                    <div class="info-item"><i class="bi bi-bar-chart"></i> <span id="room-difficulty-display"></span>
+                    </div>
+                    <div class="info-item"><i class="bi bi-people"></i> <span id="room-players-display"></span></div>
+                </div>
+
+                <div class="players-waiting-box">
+                    <h3><i class="bi bi-people-fill"></i> Chefs Ready:</h3>
+                    <div id="waiting-player-list" class="player-list"></div>
+                </div>
+
+                <!-- QUICK CHAT IN LOBBY -->
+                <div class="quick-chat-lobby">
+                    <button class="quick-chat-btn" onclick="sendQuickChat('Need help!')"><i
+                            class="bi bi-exclamation-circle"></i> Help!</button>
+                    <button class="quick-chat-btn" onclick="sendQuickChat('Coming!')"><i
+                            class="bi bi-arrow-right-circle"></i> Coming!</button>
+                    <button class="quick-chat-btn" onclick="sendQuickChat('Ready!')"><i class="bi bi-check-circle"></i>
+                        Ready!</button>
+                </div>
+
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i>
+                        Leave</button>
+                    <button id="btn-ready" class="btn-primary hidden"><i class="bi bi-check-circle"></i> I'm
+                        Ready</button>
+                    <button id="btn-start-multi" class="btn-primary hidden"><i class="bi bi-play-fill"></i> Start
+                        Game</button>
+                </div>
+                <p id="waiting-hint" class="waiting-hint">Waiting for host to start...</p>
+            </div>
+
         </div>
     </div>
 
@@ -90,22 +268,32 @@
         <div id="hud" class="hud">
             <div class="hud-left">
                 <div class="hud-score" id="hud-score">
-                    <span class="score-label">SCORE</span>
+                    <span class="score-label"><i class="bi bi-trophy"></i> SCORE</span>
                     <span class="score-value" id="score-value">0</span>
                 </div>
                 <div class="hud-combo" id="hud-combo">
                     <span id="combo-value"></span>
                 </div>
+                <!-- VS MODE SCOREBOARD -->
+                <div id="vs-scoreboard" class="vs-scoreboard hidden">
+                    <div class="scoreboard-title"><i class="bi bi-trophy-fill"></i> Scores</div>
+                    <div id="vs-scores-list"></div>
+                </div>
             </div>
             <div class="hud-center">
                 <div class="hud-timer" id="hud-timer">
-                    <span class="timer-icon">⏱️</span>
+                    <i class="bi bi-stopwatch timer-icon"></i>
                     <span class="timer-value" id="timer-value">3:00</span>
+                </div>
+                <!-- CONNECTION QUALITY -->
+                <div id="connection-quality" class="connection-quality">
+                    <i class="bi bi-wifi" id="connection-icon"></i>
+                    <span id="ping-value">--</span>ms
                 </div>
             </div>
             <div class="hud-right">
                 <div class="hud-holding" id="hud-holding">
-                    <span class="holding-label">Holding</span>
+                    <span class="holding-label"><i class="bi bi-hand-index"></i> Holding</span>
                     <div class="holding-display" id="holding-display">Nothing</div>
                 </div>
             </div>
@@ -113,7 +301,7 @@
 
         <!-- Orders Bar -->
         <div class="orders-bar" id="orders-bar">
-            <div class="orders-label">📋 ORDERS</div>
+            <div class="orders-label"><i class="bi bi-clipboard-check"></i> ORDERS</div>
             <div class="orders-list" id="orders-list"></div>
         </div>
 
@@ -125,25 +313,59 @@
 
         <!-- Chat -->
         <div class="chat-container" id="chat-container">
+            <div class="chat-header">
+                <span><i class="bi bi-chat-dots"></i> Chat</span>
+                <button class="chat-toggle" onclick="toggleChat()"><i class="bi bi-chevron-down"></i></button>
+            </div>
             <div class="chat-messages" id="chat-messages"></div>
+            <div class="quick-chat-buttons">
+                <button class="quick-chat-btn-small" onclick="sendQuickChat('Need help!')" title="Need help!">
+                    <i class="bi bi-exclamation-circle"></i>
+                </button>
+                <button class="quick-chat-btn-small" onclick="sendQuickChat('Coming!')" title="Coming!">
+                    <i class="bi bi-arrow-right-circle"></i>
+                </button>
+                <button class="quick-chat-btn-small" onclick="sendQuickChat('Thanks!')" title="Thanks!">
+                    <i class="bi bi-heart"></i>
+                </button>
+                <button class="quick-chat-btn-small" onclick="sendQuickChat('Oops!')" title="Oops!">
+                    <i class="bi bi-emoji-frown"></i>
+                </button>
+            </div>
             <div class="chat-input-row">
                 <input type="text" id="chat-input" placeholder="Type message..." maxlength="100">
-                <button id="chat-send">💬</button>
+                <button id="chat-send"><i class="bi bi-send"></i></button>
             </div>
         </div>
 
         <!-- Recipe Book (toggle) -->
-        <button class="btn-recipe-toggle" id="btn-recipe-toggle">📖</button>
+        <button class="btn-recipe-toggle" id="btn-recipe-toggle" title="Recipe Book">
+            <i class="bi bi-book"></i>
+        </button>
         <div class="recipe-book hidden" id="recipe-book">
-            <h3>📖 Recipe Book</h3>
+            <div class="recipe-book-header">
+                <h3><i class="bi bi-book"></i> Recipe Book</h3>
+                <button onclick="document.getElementById('recipe-book').classList.add('hidden')"><i
+                        class="bi bi-x"></i></button>
+            </div>
             <div class="recipe-list" id="recipe-list"></div>
+        </div>
+
+        <!-- PAUSE MENU (Host only) - Hidden by default, shown only when paused -->
+        <div id="pause-menu" class="pause-menu hidden">
+            <div class="pause-content">
+                <h2><i class="bi bi-pause-circle"></i> Paused</h2>
+                <button class="btn-primary" onclick="resumeGame()"><i class="bi bi-play-fill"></i> Resume</button>
+                <button class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i> Leave
+                    Game</button>
+            </div>
         </div>
     </div>
 
     <!-- ========== GAME OVER SCREEN ========== -->
     <div id="gameover-screen" class="screen">
         <div class="gameover-container">
-            <h1 class="gameover-title">⏰ Time's Up!</h1>
+            <h1 class="gameover-title"><i class="bi bi-stopwatch"></i> Time's Up!</h1>
             <div class="gameover-score">
                 <div class="final-score" id="final-score">0</div>
                 <div class="score-label-big">Points</div>
@@ -152,8 +374,32 @@
             <div class="gameover-players" id="gameover-players"></div>
             <div class="star-rating" id="star-rating"></div>
             <button class="btn-primary btn-restart" id="btn-restart">
-                <span>🔄 Play Again!</span>
+                <i class="bi bi-arrow-clockwise"></i> Play Again!
             </button>
+        </div>
+    </div>
+
+    <!-- MODAL FOR PASSWORD INPUT -->
+    <div id="password-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3><i class="bi bi-lock"></i> Room Password Required</h3>
+            <input type="password" id="room-password-input" placeholder="Enter room password">
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closePasswordModal()">Cancel</button>
+                <button class="btn-primary" onclick="submitPassword()">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL FOR KICK CONFIRMATION -->
+    <div id="kick-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3><i class="bi bi-person-x"></i> Kick Player</h3>
+            <p>Are you sure you want to kick <span id="kick-player-name"></span>?</p>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeKickModal()">Cancel</button>
+                <button class="btn-danger" onclick="confirmKick()">Kick</button>
+            </div>
         </div>
     </div>
 

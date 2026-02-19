@@ -63,97 +63,619 @@ let spacePressedTime = 0;
 let didChop = false; // Restored for interaction logic
 
 // ============ LOBBY LOGIC ============
-const btnJoin = document.getElementById('btn-join');
-const btnStart = document.getElementById('btn-start');
-const btnRestart = document.getElementById('btn-restart');
+// ============ LOBBY LOGIC ============
+let currentMenu = 'main';
+let selectedDiff = 'easy';
+let selectedMode = 'multi_coop';
+let createDiff = 'easy';
+let serverListTimeout = null;
 
-btnJoin.addEventListener('click', () => {
-    const name = document.getElementById('player-name').value.trim() || 'Chef';
-    const roomId = document.getElementById('room-code').value.trim() || 'kitchen_1';
-    const mode = document.getElementById('game-mode').value;
-    const difficulty = document.getElementById('difficulty').value;
+// Expose functions to window for HTML onclicks
+window.showMenu = (menuId) => {
+    // Hide ALL menus first
+    document.querySelectorAll('.lobby-menu').forEach(el => el.classList.add('hidden'));
 
-    socket.emit('joinRoom', { name, roomId, mode, difficulty });
-});
-
-btnStart.addEventListener('click', () => socket.emit('startGame'));
-btnRestart.addEventListener('click', () => socket.emit('restartGame'));
-
-// ============ SOCKET EVENTS ============
-socket.on('init', (data) => {
-    playerId = data.playerId;
-    gameConfig = data.config;
-    roomState = data.room;
-
-    ui = new UIManager(gameConfig, socket);
-    ui.updatePlayerList(roomState.players);
-    ui.buildRecipeBook();
-
-    // Build 3D kitchen
-    if (kitchen) {
-        kitchen.clear(); // Use the built-in clear method instead of clearing the whole scene
+    // Show only the selected menu
+    const targetMenu = document.getElementById(`menu-${menuId}`);
+    if (targetMenu) {
+        targetMenu.classList.remove('hidden');
+        currentMenu = menuId;
     }
 
-    // --- RENDERER SETUP ---
-    // Force new kitchen renderer with current config
-    if (kitchen) kitchen.clear(); // Clear old if exists
-    kitchen = new KitchenRenderer(scene, gameConfig, roomState);
-    kitchen.buildKitchen(roomState.kitchen, roomState.stations);
+    if (menuId === 'join') {
+        refreshServerList();
+    }
+};
 
-    // --- CAMERA SETUP FOR 1-POINT PERSPECTIVE ---
-    const ts = gameConfig.TILE_SIZE;
-    const mapW = gameConfig.GRID_W * ts;
-    const mapH = gameConfig.GRID_H * ts;
-    const centerX = mapW / 2 - ts / 2;
-    const centerZ = mapH / 2 - ts / 2;
+window.selectDifficulty = (diff, elem) => {
+    selectedDiff = diff;
+    document.querySelectorAll('#menu-single .banner-option').forEach(el => el.classList.remove('selected'));
+    elem.classList.add('selected');
+};
 
-    const maxDim = Math.max(mapW, mapH);
+window.selectMode = (mode, elem) => {
+    selectedMode = mode;
+    document.querySelectorAll('#menu-create .banner-option').forEach(el => el.classList.remove('selected'));
+    elem.classList.add('selected');
+};
 
-    // Position camera strictly on the Z-axis relative to center (Front View)
-    // Height determines the angle "overhead"
-    // Distance Z determines how "far back"
+window.setCreateDiff = (diff, elem) => {
+    createDiff = diff;
+    document.querySelectorAll('.diff-btn').forEach(el => el.classList.remove('active'));
+    elem.classList.add('active');
+};
 
-    const height = maxDim * 1.5; // High up
-    const distBack = maxDim * 0.9; // Back a bit
+window.refreshServerList = () => {
+    socket.emit('getRooms');
+    const tbody = document.getElementById('server-list-body');
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading rooms...</td></tr>';
+    }
+    if (serverListTimeout) clearTimeout(serverListTimeout);
+    serverListTimeout = setTimeout(() => {
+        const body = document.getElementById('server-list-body');
+        if (body && body.innerHTML.includes('Loading')) {
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center;">No rooms found.</td></tr>';
+        }
+    }, 3000);
+};
 
-    // Smooth transition if we wanted, but for init we snap
-    camera.position.set(centerX, height, centerZ + distBack);
-    // Look slightly ahead of center to balance the view
-    camera.lookAt(centerX, 0, centerZ * 0.8);
+window.joinRoom = (roomId) => {
+    const name = document.getElementById('player-name').value.trim() || 'Chef';
+    // Join existing room
+    socket.emit('joinRoom', { name, roomId, password: window.pendingPassword || undefined }); // Mode/Diff taken from room
+    window.pendingPassword = null; // Clear after use
+};
 
-    // Update Shadow Camera to fit
-    dirLight.shadow.camera.left = -maxDim;
-    dirLight.shadow.camera.right = maxDim;
-    dirLight.shadow.camera.top = maxDim;
-    dirLight.shadow.camera.bottom = -maxDim;
-    dirLight.shadow.camera.updateProjectionMatrix();
+window.leaveRoom = () => {
+    socket.emit('leaveRoom');
+    location.reload(); // Simple reload to leave for now
+};
+
+window.startSinglePlayer = (difficulty = 'easy') => {
+    const name = document.getElementById('player-name').value.trim() || 'Chef';
+    const roomId = `sp_${Date.now()}`;
+    socket.emit('joinRoom', {
+        name,
+        roomId,
+        mode: 'single',
+        difficulty: difficulty
+    });
+    // For single player, we want to hide the lobby immediately to give instant feedback
+    const lobbyScreen = document.getElementById('lobby-screen');
+    if (lobbyScreen) lobbyScreen.classList.remove('active');
+    // We'll show the game screen when gameStarted arrives, 
+    // but in the meantime, we can show a minimalist loading if needed.
+};
+
+// ============ NEW FEATURE HANDLERS ============
+
+// Room Code Functions
+window.joinByCode = () => {
+    const codeInput = document.getElementById('join-room-code');
+    if (!codeInput) return;
+    const code = codeInput.value.trim();
+    if (code.length === 6 && /^\d+$/.test(code)) {
+        socket.emit('joinByCode', { code });
+        codeInput.value = ''; // Clear input
+    } else {
+        const notification = document.getElementById('notifications');
+        if (notification) {
+            const el = document.createElement('div');
+            el.className = 'notification error';
+            el.textContent = 'Invalid room code! Must be 6 digits.';
+            notification.appendChild(el);
+            setTimeout(() => el.remove(), 2500);
+        }
+    }
+};
+
+window.copyRoomCode = () => {
+    const codeEl = document.getElementById('room-code-value');
+    if (!codeEl) return;
+    const code = codeEl.textContent;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            const notification = document.getElementById('notifications');
+            if (notification) {
+                const el = document.createElement('div');
+                el.className = 'notification success';
+                el.textContent = 'Room code copied!';
+                notification.appendChild(el);
+                setTimeout(() => el.remove(), 2500);
+            }
+        });
+    }
+};
+
+window.togglePasswordField = () => {
+    const checkbox = document.getElementById('create-room-password-check');
+    const passwordInput = document.getElementById('create-room-password');
+    passwordInput.style.display = checkbox.checked ? 'block' : 'none';
+    if (!checkbox.checked) passwordInput.value = '';
+};
+
+// Quick Chat
+window.sendQuickChat = (message) => {
+    socket.emit('chatMessage', message);
+};
+
+// Server Filters
+window.applyFilters = () => {
+    refreshServerList();
+};
+
+window.clearFilters = () => {
+    document.getElementById('filter-mode').value = '';
+    document.getElementById('filter-difficulty').value = '';
+    refreshServerList();
+};
+
+// Friends
+window.addFriend = () => {
+    const friendName = document.getElementById('add-friend-input').value.trim();
+    if (friendName) {
+        socket.emit('addFriend', { name: friendName });
+        document.getElementById('add-friend-input').value = '';
+    }
+};
+
+// Chat Toggle
+window.toggleChat = () => {
+    const chat = document.getElementById('chat-container');
+    chat.classList.toggle('collapsed');
+};
+
+// Pause Menu
+window.resumeGame = () => {
+    document.getElementById('pause-menu').classList.add('hidden');
+};
+
+// Password Modal
+window.closePasswordModal = () => {
+    document.getElementById('password-modal').classList.add('hidden');
+    document.getElementById('room-password-input').value = '';
+};
+
+window.submitPassword = () => {
+    const password = document.getElementById('room-password-input').value.trim();
+    if (password) {
+        socket.emit('joinRoomWithPassword', { password });
+        closePasswordModal();
+    }
+};
+
+// Kick Modal
+let kickTargetId = null;
+window.closeKickModal = () => {
+    document.getElementById('kick-modal').classList.add('hidden');
+    kickTargetId = null;
+};
+
+window.confirmKick = () => {
+    if (kickTargetId) {
+        socket.emit('kickPlayer', { playerId: kickTargetId });
+        closeKickModal();
+    }
+};
+
+window.showKickModal = (playerId, playerName) => {
+    kickTargetId = playerId;
+    document.getElementById('kick-player-name').textContent = playerName;
+    document.getElementById('kick-modal').classList.remove('hidden');
+};
+
+// Connection Quality Tracking
+let pingInterval = null;
+let lastPingTime = 0;
+
+function updateConnectionStatus(status) {
+    const statusEl = document.getElementById('connection-status');
+    const textEl = document.getElementById('connection-text');
+    if (statusEl && textEl) {
+        statusEl.className = `connection-status ${status}`;
+        textEl.textContent = status === 'connected' ? 'Connected' : status === 'disconnected' ? 'Disconnected' : 'Connecting...';
+    }
+}
+
+function updatePing(ping) {
+    const pingEl = document.getElementById('ping-value');
+    const iconEl = document.getElementById('connection-icon');
+    const qualityEl = document.getElementById('connection-quality');
+
+    if (pingEl) pingEl.textContent = ping;
+    if (qualityEl) {
+        qualityEl.className = 'connection-quality';
+        if (ping < 50) {
+            qualityEl.classList.add('good');
+            if (iconEl) iconEl.className = 'bi bi-wifi';
+        } else if (ping < 150) {
+            qualityEl.classList.add('medium');
+            if (iconEl) iconEl.className = 'bi bi-wifi-2';
+        } else {
+            qualityEl.classList.add('bad');
+            if (iconEl) iconEl.className = 'bi bi-wifi-1';
+        }
+    }
+}
+
+function startPingTracking() {
+    if (pingInterval) clearInterval(pingInterval);
+    pingInterval = setInterval(() => {
+        lastPingTime = Date.now();
+        socket.emit('ping');
+    }, 2000);
+}
+
+// Initial setup
+document.addEventListener('DOMContentLoaded', () => {
+    // Select defaults
+    const singleOptions = document.querySelectorAll('#menu-single .banner-option');
+    if (singleOptions.length > 0) singleOptions[0].classList.add('selected');
+
+    const createOptions = document.querySelectorAll('#menu-create .banner-option');
+    if (createOptions.length > 0) createOptions[0].classList.add('selected');
+});
+
+// START SINGLE PLAYER
+const btnStartSingle = document.getElementById('btn-start-single');
+if (btnStartSingle) {
+    btnStartSingle.addEventListener('click', () => {
+        const name = document.getElementById('player-name').value.trim() || 'Chef';
+        const roomId = `sp_${Date.now()}`;
+        socket.emit('joinRoom', {
+            name,
+            roomId,
+            mode: 'single',
+            difficulty: selectedDiff
+        });
+        // Single player auto-starts immediately - skip waiting room
+        // The server will detect single player mode and start game automatically
+    });
+}
+
+// CREATE LOBBY
+const btnCreateLobby = document.getElementById('btn-create-lobby');
+if (btnCreateLobby) {
+    btnCreateLobby.addEventListener('click', () => {
+        const name = document.getElementById('player-name').value.trim() || 'Chef';
+        let roomName = document.getElementById('create-room-name').value.trim();
+        if (!roomName) roomName = `Kitchen_${Math.floor(Math.random() * 1000)}`;
+
+        const description = document.getElementById('create-room-desc')?.value.trim() || '';
+        const passwordCheck = document.getElementById('create-room-password-check')?.checked || false;
+        const password = passwordCheck ? document.getElementById('create-room-password')?.value.trim() : '';
+
+        socket.emit('createRoom', {
+            name,
+            roomName,
+            mode: selectedMode,
+            difficulty: createDiff,
+            description,
+            password: password || undefined
+        });
+    });
+}
+
+// READY BUTTON (NON-HOST PLAYERS)
+const btnReady = document.getElementById('btn-ready');
+if (btnReady) {
+    btnReady.addEventListener('click', () => {
+        socket.emit('toggleReady');
+    });
+}
+
+// START GAME (HOST)
+const btnStartMulti = document.getElementById('btn-start-multi');
+if (btnStartMulti) {
+    btnStartMulti.addEventListener('click', () => {
+        socket.emit('startGame');
+    });
+}
+
+// RESTART GAME (GAME OVER SCREEN)
+const btnRestart = document.getElementById('btn-restart');
+if (btnRestart) {
+    btnRestart.addEventListener('click', () => {
+        socket.emit('restartGame');
+    });
+}
+
+// ============ SOCKET EVENTS ============
+socket.on('roomList', (rooms) => {
+    const tbody = document.getElementById('server-list-body');
+    if (!tbody) return;
+
+    if (serverListTimeout) {
+        clearTimeout(serverListTimeout);
+        serverListTimeout = null;
+    }
+
+    const filterMode = document.getElementById('filter-mode')?.value || '';
+    const filterDifficulty = document.getElementById('filter-difficulty')?.value || '';
+
+    let filteredRooms = rooms;
+    if (filterMode) filteredRooms = filteredRooms.filter(r => r.mode === filterMode);
+    if (filterDifficulty) filteredRooms = filteredRooms.filter(r => r.difficulty === filterDifficulty);
+
+    tbody.innerHTML = '';
+
+    if (filteredRooms.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No rooms found.</td></tr>';
+        return;
+    }
+
+    filteredRooms.forEach(room => {
+        const tr = document.createElement('tr');
+
+        const modeIcons = {
+            'single': '<i class="bi bi-person"></i> Single',
+            'multi_coop': '<i class="bi bi-people-fill"></i> Co-op',
+            'multi_vs': '<i class="bi bi-sword"></i> VS'
+        };
+
+        const statusBadge = room.state === 'playing'
+            ? '<span class="status-badge ingame">In Game</span>'
+            : room.players >= room.maxPlayers
+                ? '<span class="status-badge full">Full</span>'
+                : '<span class="status-badge waiting">Waiting</span>';
+
+        const hasPassword = room.hasPassword ? '<i class="bi bi-lock-fill" title="Password Protected"></i> ' : '';
+        const description = room.description ? `<br><small style="color:var(--text-dim);">${room.description}</small>` : '';
+
+        tr.innerHTML = `
+            <td><b>${hasPassword}${room.id}</b>${description}</td>
+            <td>${modeIcons[room.mode] || room.mode} <small>(${room.difficulty})</small></td>
+            <td>${room.players}/${room.maxPlayers}</td>
+            <td>${statusBadge}</td>
+            <td>
+                ${room.players < room.maxPlayers && room.state !== 'playing'
+                ? `<button class="btn-sm" onclick="joinRoom('${room.id}')"><i class="bi bi-box-arrow-in-right"></i> JOIN</button>`
+                : '<span style="color:#ef4444; font-size:12px;">UNAVAILABLE</span>'}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+});
+
+
+// ============ SOCKET EVENTS ============
+// ============ SOCKET EVENTS ============
+socket.on('init', (data) => {
+    try {
+        playerId = data.playerId;
+        gameConfig = data.config;
+        roomState = data.room;
+
+        if (!gameConfig || !roomState) {
+            console.error('Missing game config or room state');
+            return;
+        }
+
+        ui = new UIManager(gameConfig, socket);
+        ui.updatePlayerList(roomState.players); // Keep for game HUD
+        ui.buildRecipeBook();
+
+        // --- LOBBY UI UPDATE ---
+        // Hide all menus, show waiting room only if NOT single player
+        document.querySelectorAll('.lobby-menu').forEach(el => el.classList.add('hidden'));
+
+        if (roomState.mode !== 'single') {
+            const waitingMenu = document.getElementById('menu-waiting');
+            if (waitingMenu) waitingMenu.classList.remove('hidden');
+        } else {
+            // For single player, ensure lobby screen is hidden (in case it wasn't already)
+            const lobbyScreen = document.getElementById('lobby-screen');
+            if (lobbyScreen) lobbyScreen.classList.remove('active');
+            const gameScreen = document.getElementById('game-screen');
+            if (gameScreen) gameScreen.classList.add('active');
+        }
+
+        const waitingRoomName = document.getElementById('waiting-room-name');
+        if (waitingRoomName) waitingRoomName.innerText = `Room: ${roomState.id}`;
+
+        // Show room code
+        const roomCodeValue = document.getElementById('room-code-value');
+        if (roomCodeValue && data.roomCode) {
+            roomCodeValue.textContent = data.roomCode;
+        }
+
+        // Show room info
+        const modeDisplay = roomState.mode === 'multi_coop' ? 'Co-op' : roomState.mode === 'multi_vs' ? 'VS' : 'Single';
+        const roomModeDisplay = document.getElementById('room-mode-display');
+        const roomDifficultyDisplay = document.getElementById('room-difficulty-display');
+        const roomPlayersDisplay = document.getElementById('room-players-display');
+
+        if (roomModeDisplay) roomModeDisplay.textContent = `Mode: ${modeDisplay}`;
+        if (roomDifficultyDisplay) roomDifficultyDisplay.textContent = `Difficulty: ${roomState.difficulty}`;
+        const playerCount = Object.keys(roomState.players).length;
+        const maxPlayers = roomState.mode === 'single' ? 1 : roomState.mode === 'multi_vs' ? 2 : 3;
+        if (roomPlayersDisplay) roomPlayersDisplay.textContent = `Players: ${playerCount}/${maxPlayers}`;
+
+        updateWaitingList(roomState.players);
+
+        // Start ping tracking
+        if (typeof startPingTracking === 'function') {
+            startPingTracking();
+        }
+    } catch (error) {
+        console.error('Error in init handler:', error);
+    }
+
+    // --- KITCHEN SETUP ---
+    if (kitchen && typeof kitchen.clear === 'function') kitchen.clear();
+    try {
+        kitchen = new KitchenRenderer(scene, gameConfig, roomState);
+        if (roomState.kitchen && roomState.stations) {
+            kitchen.buildKitchen(roomState.kitchen, roomState.stations);
+        }
+    } catch (error) {
+        console.error('Error building kitchen:', error);
+    }
+
+    // Camera Setup (Front View)
+    if (typeof setupCamera === 'function') {
+        setupCamera(gameConfig);
+    }
 
     // Create player meshes
-    Object.values(roomState.players).forEach(p => createPlayerMesh(p));
-
-    btnStart.classList.remove('hidden');
-    document.getElementById('players-waiting').style.display = 'block';
+    if (roomState.players) {
+        Object.values(roomState.players).forEach(p => {
+            try {
+                createPlayerMesh(p);
+            } catch (error) {
+                console.error('Error creating player mesh:', error);
+            }
+        });
+    }
 });
 
 socket.on('playerJoined', (player) => {
     if (!roomState) return;
     roomState.players[player.id] = player;
-    createPlayerMesh(player);
-    ui.updatePlayerList(roomState.players);
+
+    try {
+        createPlayerMesh(player);
+    } catch (error) {
+        console.error('Error creating player mesh:', error);
+    }
+
+    if (ui && typeof ui.updatePlayerList === 'function') {
+        ui.updatePlayerList(roomState.players);
+    }
+
+    // Update Waiting Room User List
+    updateWaitingList(roomState.players);
 });
+
+function updateWaitingList(players) {
+    const list = document.getElementById('waiting-player-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const me = players[playerId];
+    const isHost = me ? me.isHost : false;
+
+    Object.values(players).forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'player-tag';
+        if (p.isReady) div.classList.add('ready');
+
+        const readyStatus = p.isHost ? '<span class="ready-badge host">HOST</span>' : (p.isReady ? '<span class="ready-badge success"><i class="bi bi-check-lg"></i> READY</span>' : '<span class="ready-badge pending">WAITING</span>');
+        const hostIcon = p.isHost ? '<i class="bi bi-crown-fill" style="color:#FFD23F"></i> ' : '';
+        const youSuffix = p.id === playerId ? ' (You)' : '';
+
+        div.innerHTML = `
+            <div class="player-info">
+                ${hostIcon}<strong>${p.name}${youSuffix}</strong>
+            </div>
+            <div class="player-status">
+                ${readyStatus}
+            </div>
+            ${isHost && p.id !== playerId ? `<button class="btn-kick" onclick="showKickModal('${p.id}', '${p.name}')" title="Kick player"><i class="bi bi-person-x"></i></button>` : ''}
+        `;
+        div.style.borderLeft = `4px solid ${p.color || '#ff6b35'}`;
+        list.appendChild(div);
+    });
+
+    const btnStart = document.getElementById('btn-start-multi');
+    const btnReady = document.getElementById('btn-ready');
+    const waitingHint = document.getElementById('waiting-hint');
+
+    if (isHost) {
+        if (btnStart) {
+            btnStart.classList.remove('hidden');
+            const otherPlayers = Object.values(players).filter(p => !p.isHost);
+            const allReady = otherPlayers.every(p => p.isReady);
+
+            if (otherPlayers.length > 0 && !allReady) {
+                btnStart.disabled = true;
+                btnStart.classList.add('disabled');
+                if (waitingHint) waitingHint.innerText = 'Waiting for all chefs to get ready...';
+            } else {
+                btnStart.disabled = false;
+                btnStart.classList.remove('disabled');
+                if (waitingHint) waitingHint.innerText = otherPlayers.length > 0 ? 'Everyone is ready! LET\'S COOK!' : 'Waiting for more chefs to join...';
+            }
+        }
+        if (btnReady) btnReady.classList.add('hidden');
+    } else {
+        if (btnStart) btnStart.classList.add('hidden');
+        if (btnReady) {
+            btnReady.classList.remove('hidden');
+            const me = players[playerId];
+            if (me && me.isReady) {
+                btnReady.innerHTML = '<i class="bi bi-check-all"></i> READY!';
+                btnReady.classList.add('ready-active');
+            } else {
+                btnReady.innerHTML = '<i class="bi bi-check-circle"></i> I\'M READY';
+                btnReady.classList.remove('ready-active');
+            }
+        }
+        if (waitingHint) {
+            const me = players[playerId];
+            waitingHint.innerText = (me && me.isReady) ? 'You are ready! Waiting for the host...' : 'Click "I\'M READY" when you are set!';
+        }
+    }
+}
+
+function setupCamera(config) {
+    const ts = config.TILE_SIZE;
+    const mapW = config.GRID_W * ts;
+    const mapH = config.GRID_H * ts;
+    const centerX = mapW / 2 - ts / 2;
+    const centerZ = mapH / 2 - ts / 2;
+    const maxDim = Math.max(mapW, mapH);
+    const height = maxDim * 1.5;
+    const distBack = maxDim * 0.9;
+
+    camera.position.set(centerX, height, centerZ + distBack);
+    camera.lookAt(centerX, 0, centerZ * 0.8);
+
+    dirLight.shadow.camera.left = -maxDim;
+    dirLight.shadow.camera.right = maxDim;
+    dirLight.shadow.camera.top = maxDim;
+    dirLight.shadow.camera.bottom = -maxDim;
+    dirLight.shadow.camera.updateProjectionMatrix();
+}
 
 socket.on('playerLeft', (id) => {
     if (!roomState) return;
     delete roomState.players[id];
     removePlayerMesh(id);
     ui.updatePlayerList(roomState.players);
+    updateWaitingList(roomState.players);
+});
+
+socket.on('playerReadyUpdate', (data) => {
+    if (!roomState || !roomState.players[data.id]) return;
+    roomState.players[data.id].isReady = data.isReady;
+    updateWaitingList(roomState.players);
+});
+
+socket.on('hostChanged', (data) => {
+    if (!roomState) return;
+
+    // Update host status for all players
+    Object.values(roomState.players).forEach(p => {
+        const wasHost = p.isHost;
+        p.isHost = (p.id === data.newHostId);
+
+        // If I am the new host, show a notification
+        if (p.id === playerId && p.isHost && !wasHost) {
+            if (ui && typeof ui.showNotification === 'function') {
+                ui.showNotification('You are now the host!', 'success');
+            }
+        }
+    });
+
+    updateWaitingList(roomState.players);
 });
 
 socket.on('playerMoved', (data) => {
     if (!roomState) return;
     const p = roomState.players[data.id];
     if (p) {
-        // Update target position for interpolation
         p.x = data.x;
         p.z = data.z;
         p.facing = data.facing;
@@ -165,97 +687,194 @@ socket.on('playerMoved', (data) => {
 });
 
 socket.on('playerUpdate', (data) => {
-    if (!roomState) return;
+    if (!roomState || !gameConfig) return;
     const p = roomState.players[data.id];
     if (p) {
-        // Only update position from server if it's NOT the local player
-        // (Local player is authoritative for immediate feel, server syncs eventually)
         if (data.id !== playerId) {
             p.x = data.x !== undefined ? data.x : data.gridX * gameConfig.TILE_SIZE;
             p.z = data.z !== undefined ? data.z : data.gridZ * gameConfig.TILE_SIZE;
             p.facing = data.facing;
         }
-        // Always sync these
         p.holding = data.holding;
         if (playerMeshes[data.id]) {
-            updatePlayerHeldItem(data.id, data.holding);
+            try {
+                updatePlayerHeldItem(data.id, data.holding);
+            } catch (error) {
+                console.error('Error updating player held item:', error);
+            }
         }
         p.score = data.score;
-        p.gridX = data.gridX; // Keep for reference
+        p.gridX = data.gridX;
         p.gridZ = data.gridZ;
     }
-    if (data.id === playerId) {
+    if (data.id === playerId && ui && typeof ui.updateHolding === 'function') {
         ui.updateHolding(data.holding, gameConfig);
-        // Sync score but don't overwrite pos to avoid jitter
     }
 });
 
 socket.on('gameStarted', (data) => {
+    if (!roomState) return;
+
     roomState.state = 'playing';
-    roomState.orders = data.orders;
+    roomState.orders = data.orders || [];
     roomState.timeLeft = data.timeLeft;
-    ui.showScreen('game');
-    ui.updateOrders(data.orders, gameConfig);
+
+    // Hide Lobby, Show Game
+    const lobbyScreen = document.getElementById('lobby-screen');
+    const gameScreen = document.getElementById('game-screen');
+    if (lobbyScreen) lobbyScreen.classList.remove('active');
+    if (gameScreen) gameScreen.classList.add('active');
+
+    // Hide pause menu if it's showing
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) pauseMenu.classList.add('hidden');
+
+    if (ui) {
+        ui.showScreen('game');
+        if (data.orders) ui.updateOrders(data.orders, gameConfig);
+    }
 });
 
 socket.on('gameRestarted', (data) => {
+    if (!data || !data.room) return;
+
     roomState = data.room;
     roomState.state = 'lobby';
-    if (kitchen) kitchen.resetStations(roomState.stations);
-    Object.values(roomState.players).forEach(p => createPlayerMesh(p));
-    ui.showScreen('lobby');
-    ui.updatePlayerList(roomState.players);
+
+    try {
+        if (kitchen && typeof kitchen.resetStations === 'function') {
+            kitchen.resetStations(roomState.stations);
+        }
+        if (roomState.players) {
+            Object.values(roomState.players).forEach(p => {
+                try {
+                    createPlayerMesh(p);
+                } catch (e) {
+                    console.error('Error creating player mesh:', e);
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error in gameRestarted:', error);
+    }
+
+    // Show Lobby (Waiting Room) if NOT single player
+    if (roomState.mode !== 'single') {
+        const gameScreen = document.getElementById('game-screen');
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const gameoverScreen = document.getElementById('gameover-screen');
+        const pauseMenu = document.getElementById('pause-menu');
+
+        if (gameScreen) gameScreen.classList.remove('active');
+        if (lobbyScreen) lobbyScreen.classList.add('active');
+        if (gameoverScreen) gameoverScreen.classList.remove('active');
+        if (pauseMenu) pauseMenu.classList.add('hidden');
+
+        if (typeof showMenu === 'function') showMenu('waiting');
+        if (ui) {
+            ui.showScreen('lobby');
+            ui.updatePlayerList(roomState.players);
+        }
+    } else {
+        // For single player, just ensure gameover screen is hidden
+        const gameoverScreen = document.getElementById('gameover-screen');
+        if (gameoverScreen) gameoverScreen.classList.remove('active');
+        const gameScreen = document.getElementById('game-screen');
+        if (gameScreen) gameScreen.classList.add('active');
+    }
+    updateWaitingList(roomState.players);
 });
 
 socket.on('newOrder', (order) => {
-    if (!roomState) return;
+    if (!roomState || !gameConfig) return;
     roomState.orders.push(order);
-    ui.updateOrders(roomState.orders, gameConfig);
+    if (ui && typeof ui.updateOrders === 'function') {
+        ui.updateOrders(roomState.orders, gameConfig);
+    }
 });
 
 socket.on('orderCompleted', (data) => {
-    if (!roomState) return;
+    if (!roomState || !gameConfig) return;
     roomState.orders = roomState.orders.filter(o => o.id !== data.orderId);
     roomState.score = data.totalScore;
-    ui.updateOrders(roomState.orders, gameConfig);
-    ui.updateScore(data.totalScore, data.combo);
-    ui.showScorePop(`+${data.points}`);
+    if (ui) {
+        if (typeof ui.updateOrders === 'function') ui.updateOrders(roomState.orders, gameConfig);
+        if (typeof ui.updateScore === 'function') ui.updateScore(data.totalScore, data.combo);
+        if (typeof ui.showScorePop === 'function') ui.showScorePop(`+${data.points}`);
+    }
 });
 
 socket.on('orderExpired', (data) => {
-    if (!roomState) return;
+    if (!roomState || !gameConfig) return;
     roomState.orders = roomState.orders.filter(o => o.id !== data.orderId);
     roomState.score = data.score;
-    ui.updateOrders(roomState.orders, gameConfig);
-    ui.updateScore(data.score, 0);
+    if (ui) {
+        if (typeof ui.updateOrders === 'function') ui.updateOrders(roomState.orders, gameConfig);
+        if (typeof ui.updateScore === 'function') ui.updateScore(data.score, 0);
+    }
 });
 
 socket.on('wrongDish', (data) => {
+    if (!roomState) return;
     roomState.score = data.score;
-    ui.updateScore(data.score, 0);
+    if (ui && typeof ui.updateScore === 'function') {
+        ui.updateScore(data.score, 0);
+    }
 });
 
 socket.on('timeUpdate', (t) => {
     if (!roomState) return;
     roomState.timeLeft = t;
-    ui.updateTimer(t);
+    if (ui && typeof ui.updateTimer === 'function') {
+        ui.updateTimer(t);
+    }
 });
 
 socket.on('stationUpdate', (data) => {
     if (!roomState) return;
     roomState.stations[data.stationId] = data.station;
-    if (kitchen) kitchen.updateStation(data.stationId, data.station);
+    if (kitchen && typeof kitchen.updateStation === 'function') {
+        try {
+            kitchen.updateStation(data.stationId, data.station);
+        } catch (error) {
+            console.error('Error updating station:', error);
+        }
+    }
 });
 
-socket.on('chopComplete', (data) => ui.showNotification(`✅ ${data.ingredient} chopped!`, 'success'));
-// socket.on('cookComplete', (data) => ui.showNotification('🍳 Cooking done! Grab it!', 'info'));
-socket.on('burning', () => ui.showNotification('⚠️ Food is burning!', 'error'));
+socket.on('chopComplete', (data) => {
+    if (ui && typeof ui.showNotification === 'function') {
+        ui.showNotification(`${data.ingredient} chopped!`, 'success');
+    }
+});
+socket.on('burning', () => {
+    if (ui && typeof ui.showNotification === 'function') {
+        ui.showNotification('Food is burning!', 'error');
+    }
+});
 socket.on('fire', () => { });
-socket.on('notification', (data) => ui.showNotification(data.msg, data.type));
+socket.on('notification', (data) => {
+    if (ui && typeof ui.showNotification === 'function') {
+        ui.showNotification(data.msg, data.type);
+    } else {
+        // Fallback notification
+        const notification = document.getElementById('notifications');
+        if (notification && data) {
+            const el = document.createElement('div');
+            el.className = `notification ${data.type || 'info'}`;
+            el.textContent = data.msg;
+            notification.appendChild(el);
+            setTimeout(() => el.remove(), 2500);
+        }
+    }
+});
 
 socket.on('gameOver', (data) => {
+    if (!roomState) return;
     roomState.state = 'gameover';
-    ui.showGameOver(data);
+    if (ui && typeof ui.showGameOver === 'function') {
+        ui.showGameOver(data);
+    }
 });
 
 socket.on('gameStateUpdate', (data) => {
@@ -263,13 +882,223 @@ socket.on('gameStateUpdate', (data) => {
     roomState.stations = data.stations;
     roomState.orders = data.orders;
     roomState.score = data.score;
-    if (kitchen) kitchen.updateAllStations(data.stations);
+    if (kitchen && typeof kitchen.updateAllStations === 'function') {
+        try {
+            kitchen.updateAllStations(data.stations);
+        } catch (error) {
+            console.error('Error updating all stations:', error);
+        }
+    }
 });
 
-socket.on('chatMessage', (data) => ui.addChatMessage(data));
+socket.on('chatMessage', (data) => {
+    if (ui && typeof ui.addChatMessage === 'function') {
+        ui.addChatMessage(data);
+    }
+});
 socket.on('playerRenamed', (data) => {
     if (roomState && roomState.players[data.id]) {
         roomState.players[data.id].name = data.name;
+    }
+});
+
+// ============ NEW FEATURE SOCKET HANDLERS ============
+
+// Connection Status
+socket.on('connect', () => {
+    updateConnectionStatus('connected');
+    startPingTracking();
+});
+
+socket.on('disconnect', () => {
+    updateConnectionStatus('disconnected');
+    if (pingInterval) clearInterval(pingInterval);
+});
+
+socket.on('connect_error', () => {
+    updateConnectionStatus('disconnected');
+});
+
+// Ping/Pong for connection quality
+socket.on('pong', () => {
+    if (typeof lastPingTime !== 'undefined' && typeof updatePing === 'function') {
+        const ping = Date.now() - lastPingTime;
+        updatePing(ping);
+    }
+});
+
+// Room Code
+socket.on('roomCode', (data) => {
+    if (data.code) {
+        document.getElementById('room-code-value').textContent = data.code;
+    }
+});
+
+// Join by Code Response
+socket.on('joinByCodeResult', (data) => {
+    if (data.success) {
+        if (data.requiresPassword) {
+            document.getElementById('password-modal').classList.remove('hidden');
+            // Store room code and ID for password submission
+            window.pendingRoomCode = data.code;
+            window.pendingRoomId = data.roomId;
+        } else {
+            socket.emit('joinRoom', {
+                name: document.getElementById('player-name').value.trim() || 'Chef',
+                roomId: data.roomId
+            });
+        }
+    } else {
+        ui?.showNotification(data.message || 'Room not found!', 'error');
+    }
+});
+
+// Password Required
+socket.on('passwordRequired', (data) => {
+    document.getElementById('password-modal').classList.remove('hidden');
+    if (data && data.roomId) {
+        window.pendingRoomId = data.roomId;
+    }
+});
+
+// Friends
+socket.on('friendList', (friends) => {
+    const list = document.getElementById('friends-list');
+    if (!list) return;
+
+    if (friends.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">No friends yet</p>';
+        return;
+    }
+
+    list.innerHTML = friends.map(f => `
+        <div class="friend-item">
+            <div class="friend-info">
+                <span class="friend-status ${f.status || 'offline'}"></span>
+                <span>${f.name}</span>
+            </div>
+            <button class="btn-sm" onclick="inviteFriend('${f.id}')" title="Invite to game"><i class="bi bi-envelope"></i></button>
+        </div>
+    `).join('');
+});
+
+socket.on('friendAdded', (data) => {
+    if (ui && typeof ui.showNotification === 'function') {
+        ui.showNotification(`Friend ${data.name} added!`, 'success');
+    }
+    socket.emit('getFriends');
+});
+
+socket.on('friendOnline', (data) => {
+    ui?.showNotification(`${data.name} is now online!`, 'info');
+});
+
+// VS Scoreboard Update
+socket.on('scoreUpdate', (data) => {
+    if (roomState && roomState.mode === 'multi_vs') {
+        updateVSScoreboard(data.scores);
+    }
+});
+
+function updateVSScoreboard(scores) {
+    const list = document.getElementById('vs-scores-list');
+    const board = document.getElementById('vs-scoreboard');
+    if (!list || !board) return;
+
+    board.classList.remove('hidden');
+    list.innerHTML = '';
+
+    // Sort by score descending
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+
+    sorted.forEach(([playerId, score]) => {
+        const player = roomState?.players[playerId];
+        if (!player) return;
+
+        const item = document.createElement('div');
+        item.className = 'vs-score-item';
+        item.innerHTML = `
+            <span class="player-name" style="color:${player.color}">${player.name}</span>
+            <span class="player-score">${score}</span>
+        `;
+        list.appendChild(item);
+    });
+}
+
+// Auto-refresh server list
+let serverListInterval = null;
+window.startAutoRefresh = () => {
+    if (serverListInterval) clearInterval(serverListInterval);
+    serverListInterval = setInterval(() => {
+        if (currentMenu === 'join') {
+            refreshServerList();
+        }
+    }, 5000);
+};
+
+window.stopAutoRefresh = () => {
+    if (serverListInterval) {
+        clearInterval(serverListInterval);
+        serverListInterval = null;
+    }
+};
+
+// Update showMenu to start/stop auto-refresh
+const originalShowMenu = window.showMenu;
+window.showMenu = (menuId) => {
+    if (typeof originalShowMenu === 'function') {
+        originalShowMenu(menuId);
+    }
+    if (menuId === 'join') {
+        if (typeof startAutoRefresh === 'function') startAutoRefresh();
+    } else {
+        if (typeof stopAutoRefresh === 'function') stopAutoRefresh();
+    }
+};
+
+// Invite Friend
+window.inviteFriend = (friendId) => {
+    if (roomState) {
+        socket.emit('inviteFriend', { friendId, roomId: roomState.id });
+        if (ui && typeof ui.showNotification === 'function') {
+            ui.showNotification('Invitation sent!', 'success');
+        }
+    }
+};
+
+// Game Countdown
+socket.on('gameCountdown', (data) => {
+    const countdown = data.countdown;
+    if (countdown > 0) {
+        if (ui && typeof ui.showNotification === 'function') {
+            ui.showNotification(`Game starting in ${countdown}...`, 'info');
+        }
+    } else {
+        if (ui && typeof ui.showNotification === 'function') {
+            ui.showNotification('Game starting!', 'success');
+        }
+        // Ensure pause menu is hidden
+        const pauseMenu = document.getElementById('pause-menu');
+        if (pauseMenu) pauseMenu.classList.add('hidden');
+    }
+});
+
+// Player Kicked
+socket.on('playerKicked', (data) => {
+    const notification = document.getElementById('notifications');
+    if (notification) {
+        const el = document.createElement('div');
+        el.className = 'notification error';
+        el.textContent = data.message || 'You were kicked from the room!';
+        notification.appendChild(el);
+        setTimeout(() => el.remove(), 2500);
+    }
+    setTimeout(() => location.reload(), 2000);
+});
+
+socket.on('playerKickedNotification', (data) => {
+    if (ui && typeof ui.showNotification === 'function') {
+        ui.showNotification(`${data.playerName} was kicked from the room.`, 'info');
     }
 });
 
@@ -319,6 +1148,11 @@ function createPlayerMesh(player) {
     label.scale.set(2.5, 0.6, 1);
     group.add(label);
 
+    if (!gameConfig) {
+        console.error('gameConfig not available for player mesh');
+        return;
+    }
+
     const ts = gameConfig.TILE_SIZE;
     group.position.set(player.gridX * ts, 0, player.gridZ * ts);
     scene.add(group);
@@ -326,7 +1160,11 @@ function createPlayerMesh(player) {
 
     // Initialize held item
     if (player.holding) {
-        updatePlayerHeldItem(player.id, player.holding);
+        try {
+            updatePlayerHeldItem(player.id, player.holding);
+        } catch (error) {
+            console.error('Error updating player held item:', error);
+        }
     }
 }
 
@@ -513,12 +1351,14 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    if (roomState && roomState.state === 'playing') {
+    if (roomState && roomState.state === 'playing' && gameConfig) {
         const me = roomState.players[playerId];
         if (me) {
             // Initialize float position if missing
-            if (typeof me.x === 'undefined') {
+            if (typeof me.x === 'undefined' && me.gridX !== undefined) {
                 me.x = me.gridX * gameConfig.TILE_SIZE;
+            }
+            if (typeof me.z === 'undefined' && me.gridZ !== undefined) {
                 me.z = me.gridZ * gameConfig.TILE_SIZE;
             }
 
@@ -618,7 +1458,13 @@ function animate() {
     });
 
     // Animate kitchen
-    if (kitchen) kitchen.animate(delta, roomState ? roomState.players : null);
+    if (kitchen && typeof kitchen.animate === 'function') {
+        try {
+            kitchen.animate(delta, roomState ? roomState.players : null);
+        } catch (error) {
+            console.error('Error animating kitchen:', error);
+        }
+    }
 
     // Animate steam on held items
     Object.values(playerMeshes).forEach(pm => {
@@ -651,11 +1497,11 @@ function animate() {
     });
 
     // Proximity-based crate name labels
-    if (roomState && roomState.players && roomState.players[playerId] && roomState.stations) {
+    if (roomState && roomState.players && roomState.players[playerId] && roomState.stations && kitchen) {
         const me = roomState.players[playerId];
-        const px = me.x !== undefined ? me.x : me.gridX * gameConfig.TILE_SIZE;
-        const pz = me.z !== undefined ? me.z : me.gridZ * gameConfig.TILE_SIZE;
-        const proximityDistance = (gameConfig ? gameConfig.TILE_SIZE : 2) * 2.5; // Slightly larger than interact reach
+        const px = me.x !== undefined ? me.x : me.gridX * (gameConfig ? gameConfig.TILE_SIZE : 2);
+        const pz = me.z !== undefined ? me.z : me.gridZ * (gameConfig ? gameConfig.TILE_SIZE : 2);
+        const proximityDistance = (gameConfig ? gameConfig.TILE_SIZE : 2) * 2.5;
 
         Object.values(roomState.stations).forEach(st => {
             if (st.type === 'crate') {
@@ -663,16 +1509,21 @@ function animate() {
                 const sz = st.gridZ * (gameConfig ? gameConfig.TILE_SIZE : 2);
                 const dist = Math.sqrt(Math.pow(px - sx, 2) + Math.pow(pz - sz, 2));
 
-                const label = kitchen.stationMeshes[st.id]?.group?.getObjectByName('nameLabel');
-                if (label) {
-                    label.visible = dist <= proximityDistance;
+                const stationMesh = kitchen.stationMeshes[st.id];
+                if (stationMesh && stationMesh.group) {
+                    const label = stationMesh.group.getObjectByName('nameLabel');
+                    if (label) {
+                        label.visible = dist <= proximityDistance;
+                    }
                 }
             }
         });
     }
 
     // Update order timers
-    if (roomState && ui) ui.updateOrderTimers(roomState.orders);
+    if (roomState && ui && typeof ui.updateOrderTimers === 'function') {
+        ui.updateOrderTimers(roomState.orders);
+    }
 
     renderer.render(scene, camera);
 }
@@ -693,7 +1544,7 @@ canvas.addEventListener('click', (e) => {
 });
 
 function checkCollision(x, z, ts) {
-    if (!roomState || !roomState.kitchen) return false;
+    if (!roomState || !roomState.kitchen || !gameConfig) return false;
 
     // Player collision radius
     const margin = 0.4;
@@ -718,7 +1569,7 @@ function checkCollision(x, z, ts) {
         }
 
         // Check tile type (0 is floor)
-        if (roomState.kitchen[gz][gx] !== 0) {
+        if (roomState.kitchen[gz] && roomState.kitchen[gz][gx] !== 0) {
             return true; // Hit object
         }
     }
@@ -745,15 +1596,19 @@ function updatePlayerHeldItem(playerId, holding) {
     heldGroup.position.set(0, 0.8, 0.5);
 
     // --- USE KITCHEN RENDERER'S createContentMesh FOR CONSISTENT VISUALS ---
-    if (kitchen) {
-        const contentMesh = kitchen.createContentMesh(holding);
-        // Scale down to hand-held size (station items are full-size)
-        const heldScale = 0.6;
-        contentMesh.scale.set(heldScale, heldScale, heldScale);
-        heldGroup.add(contentMesh);
+    if (kitchen && typeof kitchen.createContentMesh === 'function') {
+        try {
+            const contentMesh = kitchen.createContentMesh(holding);
+            // Scale down to hand-held size (station items are full-size)
+            const heldScale = 0.6;
+            contentMesh.scale.set(heldScale, heldScale, heldScale);
+            heldGroup.add(contentMesh);
+        } catch (error) {
+            console.error('Error creating content mesh:', error);
+        }
     } else {
         // Fallback: simple meshes if kitchen renderer isn't available
-        if (holding.type === 'ingredient') {
+        if (holding.type === 'ingredient' && gameConfig && gameConfig.INGREDIENTS) {
             const ing = gameConfig.INGREDIENTS[holding.name];
             let color = new THREE.Color(ing ? ing.color : 0xffffff);
             if (holding.burnt) color.setHex(0x000000);
