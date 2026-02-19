@@ -135,7 +135,7 @@ export class KitchenRenderer {
             counter: 0x4a5568,    // Gray-Blue
             chopping: 0xd4a373,   // Wood Light
             stove: 0x2d3436,      // Dark Charcoal
-            serve: 0xff6b35,      // Primary Orange (Theme)
+            serve: 0x4a5568,      // Gray-Blue (Matching counters)
             trash: 0xe74c3c,      // Red (Theme Danger)
             plates: 0xfbfbfb,     // White
             sink: 0x3498db,       // Blue
@@ -763,7 +763,7 @@ export class KitchenRenderer {
             let topColor = 0x999999;
             if (st.type === 'chopping') topColor = 0x808590; // Steel counter top
             if (st.type === 'stove') topColor = 0x1a1a1a;
-            if (st.type === 'serve') topColor = 0x6495ED;
+            if (st.type === 'serve') topColor = 0xbdc3c7; // Stainless Steel / Silver top
             const topMat = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.4 });
             top = new THREE.Mesh(topGeo, topMat);
             top.position.y = baseH + 0.025;
@@ -1163,57 +1163,79 @@ export class KitchenRenderer {
         }
 
         if (st.type === 'serve') {
-            // --- PREMIUM SERVING PASS-THROUGH WINDOW ---
-            const serveMat = new THREE.MeshStandardMaterial({ color: 0xE8E0D0, roughness: 0.3, metalness: 0.05 });
-            const accentMat = new THREE.MeshStandardMaterial({ color: 0xD4AF37, roughness: 0.2, metalness: 0.9 }); // Gold
-            const darkMat = new THREE.MeshStandardMaterial({ color: 0x2C2C2C, roughness: 0.5 });
+            // --- SLEEK MODERN RESTAURANT SERVING COUNTER ---
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0xdcdde1, roughness: 0.1, metalness: 0.8 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.5 });
+            const bellMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.9, roughness: 0.1 });
 
-            // Main marble-like counter slab on top
-            const slab = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.88, 0.08, this.ts * 0.72), serveMat);
-            slab.position.y = baseH + 0.04;
-            slab.receiveShadow = true;
-            slab.castShadow = true;
-            group.add(slab);
+            // Ensure base looks like a solid counter
+            if (mesh) mesh.material = new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.4 });
+            if (top) top.material = steelMat;
 
-            // Gold trim border around slab
-            const trim = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.90, 0.025, this.ts * 0.74), accentMat);
-            trim.position.y = baseH + 0.09;
-            group.add(trim);
+            // 1. Service Bell (Moved to Corner)
+            const bellGroup = new THREE.Group();
+            const bellBase = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.02, 16), darkMat);
+            const bellBody = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), bellMat);
+            bellBody.position.y = 0.015;
+            const bellBtn = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 6), darkMat);
+            bellBtn.position.y = 0.075;
+            bellGroup.add(bellBase, bellBody, bellBtn);
+            // Move bell to corner to make room for center plate
+            bellGroup.position.set(this.ts * 0.35, baseH + 0.05, this.ts * 0.35);
+            group.add(bellGroup);
 
-            // Order ticket clip (small vertical post with clip)
-            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.22, 6), darkMat);
-            post.position.set(-this.ts * 0.28, baseH + 0.20, 0);
-            group.add(post);
-            const clip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), accentMat);
-            clip.position.set(-this.ts * 0.28, baseH + 0.31, 0);
-            group.add(clip);
+            // 2. Professional Ticket Rail
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.8, 0.03, 0.04), darkMat);
+            rail.position.set(0, baseH + 0.06, -this.ts * 0.38);
+            group.add(rail);
 
-            // Service bell (gold)
-            const bellBase = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.04, 16), accentMat);
-            bellBase.position.set(this.ts * 0.22, baseH + 0.10, this.ts * 0.18);
-            group.add(bellBase);
-            const bellDome = new THREE.Mesh(
-                new THREE.SphereGeometry(0.055, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), accentMat
-            );
-            bellDome.position.set(this.ts * 0.22, baseH + 0.12, this.ts * 0.18);
-            group.add(bellDome);
-            // Bell button on top
-            const btn = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 6), darkMat);
-            btn.position.set(this.ts * 0.22, baseH + 0.178, this.ts * 0.18);
-            group.add(btn);
+            for (let i = 0; i < 3; i++) {
+                const paper = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.005), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                paper.position.set(-0.25 + i * 0.22, baseH + 0.061, -this.ts * 0.28);
+                paper.rotation.x = -Math.PI / 2.2;
+                paper.rotation.y = (i - 1) * 0.1;
+                group.add(paper);
+            }
 
-            // Heat lamp post (restaurant-style)
-            const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.40, 8), darkMat);
-            lampPost.position.set(this.ts * 0.1, baseH + 0.28, -this.ts * 0.25);
-            group.add(lampPost);
-            const lampHead = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.08, 0.06, 12), darkMat);
-            lampHead.position.set(this.ts * 0.1, baseH + 0.50, -this.ts * 0.25);
-            group.add(lampHead);
-            const lampGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.06, 0.02, 12),
-                new THREE.MeshBasicMaterial({ color: 0xFF6600, transparent: true, opacity: 0.7 }));
-            lampGlow.position.set(this.ts * 0.1, baseH + 0.475, -this.ts * 0.25);
-            group.add(lampGlow);
-            this.addLabel(group, '🍽️', baseH + 0.9);
+            // 3. Giant Plate & Utensils (Utensils on top of plate)
+            const decoGroup = new THREE.Group();
+            const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+            const silverMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.9, roughness: 0.1 });
+
+            // Giant Plate (Centered and lying flat)
+            const pMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 32), plateMat);
+            pMesh.position.set(0, baseH + 0.065, 0);
+            decoGroup.add(pMesh);
+
+            // Large Spoon (On top of plate, slightly crossed)
+            const spoon = new THREE.Group();
+            const sHandle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.02), silverMat);
+            const sHead = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), silverMat);
+            sHead.scale.set(1.2, 1.6, 0.4);
+            sHead.position.y = 0.3;
+            spoon.add(sHandle, sHead);
+            spoon.rotation.x = -Math.PI / 2;
+            spoon.rotation.z = -0.4; // Crossed angle
+            spoon.position.set(0.1, baseH + 0.1, 0);
+            decoGroup.add(spoon);
+
+            // Large Fork (On top of plate, slightly crossed)
+            const fork = new THREE.Group();
+            const fHandle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.02), silverMat);
+            const fHead = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.02), silverMat);
+            fHead.position.y = 0.3;
+            fork.add(fHandle, fHead);
+            for (let p = 0; p < 3; p++) {
+                const prong = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.02), silverMat);
+                prong.position.set(-0.04 + p * 0.04, 0.38, 0);
+                fork.add(prong);
+            }
+            fork.rotation.x = -Math.PI / 2;
+            fork.rotation.z = 0.4; // Crossed angle
+            fork.position.set(-0.1, baseH + 0.1, 0);
+            decoGroup.add(fork);
+
+            group.add(decoGroup);
         }
         if (st.type === 'trash') {
             // --- LARGE COUNTER-SIZED TRASH BIN (no label, fills tile) ---
@@ -1292,14 +1314,72 @@ export class KitchenRenderer {
             this.stationEffects[st.id] = { lidGroup, lidAngle: 0, lidOpen: false };
         }
         if (st.type === 'plates') {
-            // Stack of plates
-            for (let i = 0; i < 3; i++) {
-                const pGeo = new THREE.CylinderGeometry(0.3, 0.32, 0.06, 12);
-                const pMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-                const plate = new THREE.Mesh(pGeo, pMat);
-                plate.position.y = baseH + 0.05 + i * 0.07;
-                group.add(plate);
+            // ======================================
+            // PROFESSIONAL PLATE DISPENSER
+            // ======================================
+            const plateGroup = new THREE.Group();
+            const plateBodyMat = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, metalness: 0.8, roughness: 0.1 });
+            const chromeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9, roughness: 0.05 });
+            const platformMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, metalness: 0.5, roughness: 0.5 });
+
+            const pSz = this.ts * 0.42;
+            const pBaseH = baseH * 0.7;
+
+            // 1. Stainless Steel Cylinder Body
+            const dispenserBody = new THREE.Mesh(new THREE.CylinderGeometry(pSz, pSz, pBaseH, 24), plateBodyMat);
+            dispenserBody.position.y = pBaseH / 2;
+            dispenserBody.castShadow = true;
+            plateGroup.add(dispenserBody);
+
+            // 2. Square Base Plate (Footing)
+            const footing = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.9, 0.08, this.ts * 0.9), plateBodyMat);
+            footing.position.y = 0.04;
+            plateGroup.add(footing);
+
+            // 3. Chrome Side Rails (4 guarding posts)
+            const railGeo = new THREE.CylinderGeometry(0.015, 0.015, baseH * 0.9, 8);
+            const railDistance = pSz * 0.95;
+            for (let r = 0; r < 4; r++) {
+                const rail = new THREE.Mesh(railGeo, chromeMat);
+                const a = (r / 4) * Math.PI * 2 + Math.PI / 4;
+                rail.position.set(Math.cos(a) * railDistance, baseH * 0.45, Math.sin(a) * railDistance);
+                rail.castShadow = true;
+                plateGroup.add(rail);
             }
+
+            // 4. Spring-loaded Platform
+            const platform = new THREE.Mesh(new THREE.CylinderGeometry(pSz * 0.9, pSz * 0.9, 0.1, 24), platformMat);
+            platform.position.y = pBaseH + 0.1;
+            plateGroup.add(platform);
+
+            // 5. Tall Stack of Premium Plates
+            const platesInStack = 6;
+            for (let i = 0; i < platesInStack; i++) {
+                const plateH = 0.045;
+                const pGroup = new THREE.Group();
+
+                // Plate Base
+                const pMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.1 });
+                const pMesh = new THREE.Mesh(new THREE.CylinderGeometry(pSz * 0.85, pSz * 0.75, plateH, 24), pMat);
+                pMesh.position.y = pBaseH + 0.15 + (i * 0.06);
+                pMesh.castShadow = true;
+                pGroup.add(pMesh);
+
+                // Plate Rim (slightly larger top)
+                const rim = new THREE.Mesh(new THREE.TorusGeometry(pSz * 0.82, 0.02, 8, 24), pMat);
+                rim.rotation.x = Math.PI / 2;
+                rim.position.y = pBaseH + 0.15 + (i * 0.06) + plateH / 2;
+                pGroup.add(rim);
+
+                plateGroup.add(pGroup);
+            }
+
+            // 6. Clean/Sparkle Indicator (Emoji)
+            this.addLabel(plateGroup, '🧼', baseH + 0.6);
+
+            mesh = plateGroup;
+            group.add(plateGroup);
+            top = null; // No default top
         }
         if (st.type === 'sink') {
             // --- REALISTIC SINK MODEL ---

@@ -12,27 +12,18 @@ export class UIManager {
     }
 
     updatePlayerList(players) {
-        let list = document.getElementById('player-list');
-        if (!list) {
-            // Create a player list container in the HUD if it doesn't exist
-            const hudCenter = document.querySelector('.hud-center');
-            if (hudCenter) {
-                list = document.createElement('div');
-                list.id = 'player-list';
-                list.className = 'hud-players';
-                hudCenter.appendChild(list);
-            } else {
-                return; // Can't find a place to put it
-            }
-        }
+        let list = document.getElementById('hud-player-list');
+        if (!list) return;
 
         list.innerHTML = '';
         Object.values(players).forEach(p => {
             const tag = document.createElement('div');
-            tag.className = 'player-tag';
-            tag.style.borderColor = p.color;
-            tag.style.background = `${p.color}22`;
-            tag.innerHTML = `<i class="bi bi-person-fill"></i> ${p.name}`;
+            tag.className = 'hud-player-tag';
+            tag.style.borderLeftColor = p.color;
+            tag.innerHTML = `
+                <span class="player-name">${p.name}</span>
+                <span class="player-score">${p.score || 0} pts</span>
+            `;
             list.appendChild(tag);
         });
     }
@@ -230,29 +221,33 @@ export class UIManager {
     }
 
     setupChat() {
+        const container = document.getElementById('floating-chat-input');
         const input = document.getElementById('chat-input');
         const btn = document.getElementById('chat-send');
+
         const send = () => {
             const msg = input.value.trim();
             if (msg) {
                 this.socket.emit('chatMessage', msg);
                 input.value = '';
+                if (container) container.classList.add('hidden');
             }
         };
-        btn.addEventListener('click', send);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') send();
-            e.stopPropagation(); // prevent game input
-        });
+
+        if (btn) btn.addEventListener('click', send);
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') send();
+                if (e.key === 'Escape') {
+                    if (container) container.classList.add('hidden');
+                }
+                e.stopPropagation(); // prevent game input
+            });
+        }
     }
 
     addChatMessage(data) {
-        const container = document.getElementById('chat-messages');
-        const el = document.createElement('div');
-        el.className = 'chat-msg';
-        el.innerHTML = `<span class="sender" style="color:${data.color}">${data.sender}:</span> ${data.message}`;
-        container.appendChild(el);
-        container.scrollTop = container.scrollHeight;
+        // Handled directly in game.js socket listener now for better performance/reliability
     }
 
     setupRecipeToggle() {

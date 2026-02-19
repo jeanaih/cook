@@ -58,10 +58,19 @@ body {
 
 /* ======= LOBBY ======= */
 #lobby-screen {
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     flex-direction: column;
-    gap: 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 0;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Hide scrollbar for lobby */
+#lobby-screen::-webkit-scrollbar {
+    display: none;
 }
 
 .lobby-bg {
@@ -94,12 +103,31 @@ body {
     gap: 16px;
     max-width: 600px;
     width: 95%;
+    margin: 0 auto;
+    padding-bottom: 40px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .lobby-container {
+        max-width: 100%;
+        width: 90%;
+        gap: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .lobby-container {
+        width: 95%;
+        gap: 10px;
+    }
 }
 
 .logo-container {
     text-align: center;
     animation: logoFloat 3s ease-in-out infinite;
     margin-bottom: 10px;
+    margin-top: 20px;
 }
 
 @keyframes logoFloat {
@@ -124,6 +152,34 @@ body {
     gap: 16px;
     color: var(--primary);
     text-shadow: 0 4px 0 #c44b1a, 0 8px 20px rgba(255, 107, 53, 0.3);
+}
+
+/* Responsive logo */
+@media (max-width: 768px) {
+    .game-logo {
+        font-size: 40px;
+        gap: 12px;
+    }
+    
+    .logo-icon {
+        font-size: 48px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .game-logo {
+        font-size: 32px;
+        gap: 8px;
+    }
+    
+    .logo-icon {
+        font-size: 40px !important;
+    }
+    
+    .logo-subtitle {
+        font-size: 12px;
+        letter-spacing: 2px;
+    }
 }
 
 .logo-icon {
@@ -287,12 +343,56 @@ body {
     color: var(--text-dim);
 }
 
+/* Responsive menu buttons */
+@media (max-width: 768px) {
+    .menu-btn {
+        padding: 16px;
+        gap: 16px;
+    }
+    
+    .menu-btn .btn-icon {
+        font-size: 28px;
+        width: 50px;
+        height: 50px;
+    }
+    
+    .btn-title {
+        font-size: 18px;
+    }
+    
+    .btn-desc {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .menu-btn {
+        padding: 14px;
+        gap: 12px;
+    }
+    
+    .menu-btn .btn-icon {
+        font-size: 24px;
+        width: 45px;
+        height: 45px;
+    }
+    
+    .btn-title {
+        font-size: 16px;
+    }
+    
+    .btn-desc {
+        font-size: 11px;
+    }
+}
+
 /* BANNERS (Single Player / Create) */
 .banner-options {
     display: flex;
     gap: 16px;
     justify-content: center;
     margin-bottom: 24px;
+    flex-wrap: wrap;
 }
 
 .banner-option {
@@ -331,6 +431,49 @@ body {
 
 .banner-option p {
     font-size: 12px;
+    color: var(--text-dim);
+}
+
+/* Responsive banners */
+@media (max-width: 768px) {
+    .banner-options {
+        gap: 12px;
+    }
+    
+    .banner-option {
+        padding: 16px;
+        min-width: 120px;
+    }
+    
+    .banner-icon {
+        font-size: 36px;
+    }
+    
+    .banner-option h3 {
+        font-size: 16px;
+    }
+    
+    .banner-option p {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .banner-options {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .banner-option {
+        padding: 14px;
+        min-width: 100%;
+    }
+    
+    .banner-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+    }
+}
     color: var(--text-dim);
 }
 
@@ -392,6 +535,29 @@ body {
     font-family: var(--font-body);
 }
 
+/* Responsive inputs */
+@media (max-width: 768px) {
+    .input-group input {
+        padding: 10px;
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .input-group {
+        margin-bottom: 12px;
+    }
+    
+    .input-group input {
+        padding: 8px;
+        font-size: 13px;
+    }
+    
+    .input-group label {
+        font-size: 11px;
+    }
+}
+
 /* ACTIONS (Back/Start) */
 .menu-actions {
     display: flex;
@@ -439,6 +605,32 @@ body {
     box-shadow: 0 2px 0 var(--primary-dark);
 }
 
+/* Responsive buttons */
+@media (max-width: 768px) {
+    .btn-primary,
+    .btn-secondary {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .btn-primary,
+    .btn-secondary {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    .menu-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .menu-actions button {
+        width: 100%;
+    }
+}
+
 /* SERVER LIST */
 .server-list-container {
     background: var(--bg-card);
@@ -446,13 +638,21 @@ body {
     border-radius: var(--radius-sm);
     height: 250px;
     overflow-y: auto;
+    overflow-x: auto;
     margin-bottom: 16px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.server-list-container::-webkit-scrollbar {
+    display: none;
 }
 
 .server-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
+    min-width: 600px;
 }
 
 .server-table th {
@@ -464,6 +664,7 @@ body {
     text-transform: uppercase;
     position: sticky;
     top: 0;
+    white-space: nowrap;
 }
 
 .server-table td {
@@ -473,6 +674,43 @@ body {
 
 .server-table tr:hover {
     background: rgba(255, 255, 255, 0.05);
+}
+
+/* Responsive server table */
+@media (max-width: 768px) {
+    .server-list-container {
+        height: 200px;
+    }
+    
+    .server-table {
+        font-size: 12px;
+        min-width: 500px;
+    }
+    
+    .server-table th,
+    .server-table td {
+        padding: 8px;
+    }
+    
+    .server-table th {
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .server-list-container {
+        height: 180px;
+    }
+    
+    .server-table {
+        font-size: 11px;
+        min-width: 450px;
+    }
+    
+    .server-table th,
+    .server-table td {
+        padding: 6px;
+    }
 }
 
 .btn-sm {
@@ -620,25 +858,42 @@ body {
     pointer-events: none;
 }
 
-.hud>* {
+.hud-top-left {
+    position: absolute;
+    top: 15px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: auto;
+    width: 300px;
+}
+
+.hud-top-right {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
     pointer-events: auto;
 }
 
-.hud-left,
-.hud-right {
+.hud-row {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    align-items: flex-start;
+    gap: 12px;
 }
 
 .hud-score {
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     border: 2px solid var(--accent);
     border-radius: var(--radius-sm);
-    padding: 8px 20px;
+    padding: 6px 16px;
     min-width: 100px;
 }
 
@@ -668,10 +923,10 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.7);
     border: 2px solid var(--primary);
     border-radius: 30px;
-    padding: 10px 24px;
+    padding: 6px 16px;
 }
 
 .timer-icon {
@@ -704,12 +959,12 @@ body {
 .hud-holding {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.5);
+    align-items: flex-start;
+    background: rgba(0, 0, 0, 0.7);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 8px 16px;
-    min-width: 120px;
+    padding: 6px 12px;
+    min-width: 140px;
 }
 
 .holding-label {
@@ -729,18 +984,19 @@ body {
 /* ======= ORDERS BAR ======= */
 .orders-bar {
     position: fixed;
-    top: 80px;
+    top: 15px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     z-index: 90;
-    padding: 8px 16px;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 20px;
+    padding: 4px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 30px;
     border: 1px solid var(--border);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(8px);
+    scale: 0.9;
 }
 
 .orders-label {
@@ -755,6 +1011,15 @@ body {
     gap: 10px;
     overflow-x: auto;
     max-width: 70vw;
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+.orders-list::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari and Opera */
 }
 
 .order-card {
@@ -909,73 +1174,213 @@ body {
     }
 }
 
-/* ======= CHAT ======= */
-.chat-container {
+/* ======= QUICK CHAT SIDEBAR (Vertical) ======= */
+.quick-chat-sidebar {
     position: fixed;
-    bottom: 12px;
-    left: 12px;
-    width: 280px;
-    z-index: 150;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: var(--radius-sm);
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 8px;
+    border-radius: 30px;
     border: 1px solid var(--border);
     backdrop-filter: blur(10px);
-    overflow: hidden;
+    z-index: 100;
 }
 
-.chat-messages {
-    max-height: 140px;
-    overflow-y: auto;
-    padding: 8px 12px;
-    font-size: 13px;
-}
-
-.chat-messages::-webkit-scrollbar {
-    width: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-    background: var(--text-muted);
-    border-radius: 3px;
-}
-
-.chat-msg {
-    margin-bottom: 4px;
-    line-height: 1.4;
-}
-
-.chat-msg .sender {
-    font-weight: 800;
-}
-
-.chat-input-row {
+.side-chat-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
     display: flex;
-    border-top: 1px solid var(--border);
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.2s;
 }
 
-.chat-input-row input {
+.side-chat-btn:hover {
+    background: var(--primary);
+    transform: scale(1.1);
+}
+
+.side-chat-btn .key-hint {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    font-size: 8px;
+    background: var(--accent);
+    color: var(--bg);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+}
+
+.side-chat-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 6px;
+}
+
+/* ======= FLOATING CHAT INPUT ======= */
+.floating-chat-container {
+    position: fixed;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--primary);
+    border-radius: 30px;
+    padding: 6px 16px;
+    display: flex;
+    gap: 10px;
+    z-index: 200;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    animation: slideUpFade 0.3s ease-out;
+}
+
+@keyframes slideUpFade {
+    from {
+        transform: translate(-50%, 20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+    }
+}
+
+.floating-chat-container input {
     flex: 1;
-    padding: 8px 12px;
     background: transparent;
     border: none;
-    color: var(--text);
-    font-family: var(--font-body);
-    font-size: 13px;
+    color: white;
+    font-size: 16px;
     outline: none;
+    font-family: var(--font-body);
 }
 
-.chat-input-row button {
-    padding: 8px 12px;
+.floating-chat-container button {
     background: var(--primary);
     border: none;
     color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     cursor: pointer;
-    font-size: 14px;
-    transition: background 0.2s;
+    transition: transform 0.2s;
 }
 
-.chat-input-row button:hover {
-    background: var(--primary-dark);
+.floating-chat-container button:hover {
+    transform: scale(1.1);
+}
+
+/* ======= HUD CHAT LOG (Top Left) ======= */
+.hud-chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 150px;
+    overflow: hidden;
+    pointer-events: none;
+    margin-top: 10px;
+    mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+}
+
+.hud-chat-line {
+    background: none;
+    padding: 2px 0;
+    font-size: 14px;
+    color: white;
+    width: fit-content;
+    animation: chatPopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.hud-chat-line .sender {
+    font-weight: 800;
+    margin-right: 6px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.hud-chat-line.system {
+    font-style: italic;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.hud-chat-line.system i {
+    margin-right: 4px;
+}
+
+@keyframes chatPopIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+
+
+.floating-chat-container.hidden {
+    display: none;
+}
+
+.hud-player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 200px;
+}
+
+.hud-player-tag {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px 10px;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary);
+    font-size: 12px;
+}
+
+.hud-player-tag .player-name {
+    font-weight: 700;
+}
+
+.hud-player-tag .player-score {
+    font-family: var(--font-display);
+    color: var(--accent);
+}
+
+.key-hint {
+    font-size: 9px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 2px;
+    vertical-align: middle;
 }
 
 /* ======= RECIPE BOOK ======= */
@@ -1011,6 +1416,61 @@ body {
     padding: 16px;
     z-index: 150;
     backdrop-filter: blur(20px);
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+/* Responsive recipe book */
+@media (max-width: 768px) {
+    .recipe-book {
+        width: 280px;
+        max-height: 350px;
+        padding: 12px;
+        right: 10px;
+    }
+    
+    .btn-recipe-toggle {
+        right: 10px;
+        bottom: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .recipe-book {
+        width: calc(100vw - 20px);
+        max-height: 60vh;
+        padding: 12px;
+        right: 10px;
+        left: 10px;
+    }
+    
+    .recipe-item {
+        padding: 8px;
+        gap: 8px;
+    }
+    
+    .recipe-item-emoji {
+        font-size: 28px;
+    }
+    
+    .recipe-item-name {
+        font-size: 13px;
+    }
+    
+    .recipe-item-ings {
+        font-size: 11px;
+    }
+    
+    .recipe-item-points {
+        font-size: 14px;
+    }
+}
+
+.recipe-book::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari and Opera */
 }
 
 .recipe-book h3 {
@@ -1062,6 +1522,254 @@ body {
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ======= GUIDE BOOK ======= */
+.btn-guide-toggle {
+    position: fixed;
+    bottom: 12px;
+    right: 70px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--secondary);
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 150;
+    transition: transform 0.2s;
+    color: var(--secondary);
+}
+
+.btn-guide-toggle:hover {
+    transform: scale(1.1);
+    box-shadow: var(--glow-green);
+}
+
+.guide-book {
+    position: fixed;
+    bottom: 70px;
+    right: 70px;
+    width: 500px;
+    max-height: 600px;
+    overflow-y: auto;
+    background: var(--bg-card);
+    border: 2px solid var(--secondary);
+    border-radius: var(--radius);
+    padding: 20px;
+    z-index: 150;
+    backdrop-filter: blur(20px);
+    box-shadow: var(--glow-green);
+}
+
+/* Responsive guide book */
+@media (max-width: 768px) {
+    .guide-book {
+        width: 400px;
+        max-height: 500px;
+        padding: 16px;
+        right: 10px;
+        bottom: 70px;
+    }
+    
+    .btn-guide-toggle {
+        right: 10px;
+        bottom: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .guide-book {
+        width: calc(100vw - 20px);
+        max-height: 70vh;
+        padding: 12px;
+        right: 10px;
+        left: 10px;
+        bottom: 70px;
+    }
+    
+    .guide-section {
+        padding: 12px;
+        margin-bottom: 16px;
+    }
+    
+    .guide-section h4 {
+        font-size: 14px;
+    }
+    
+    .guide-section p,
+    .guide-section li {
+        font-size: 13px;
+    }
+}
+
+.guide-book::-webkit-scrollbar {
+    width: 8px;
+}
+
+.guide-book::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.guide-book::-webkit-scrollbar-thumb {
+    background: var(--secondary);
+    border-radius: 4px;
+}
+
+.guide-book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--secondary);
+}
+
+.guide-book-header h3 {
+    font-family: var(--font-display);
+    color: var(--secondary);
+    font-size: 20px;
+}
+
+.guide-book-header button {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.2s;
+}
+
+.guide-book-header button:hover {
+    color: var(--danger);
+}
+
+.guide-content,
+.guide-container {
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.guide-section {
+    margin-bottom: 24px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-sm);
+    border-left: 4px solid var(--secondary);
+}
+
+.guide-section h4 {
+    font-family: var(--font-display);
+    color: var(--accent);
+    font-size: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.guide-section p {
+    color: var(--text-dim);
+    margin-bottom: 8px;
+}
+
+.guide-section ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+.guide-section li {
+    padding: 6px 0;
+    padding-left: 24px;
+    position: relative;
+    color: var(--text);
+}
+
+.guide-section li::before {
+    content: "▸";
+    position: absolute;
+    left: 8px;
+    color: var(--secondary);
+    font-weight: bold;
+}
+
+.guide-section .step-number {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    background: var(--secondary);
+    color: var(--bg-dark);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 24px;
+    font-weight: 800;
+    margin-right: 8px;
+    font-size: 12px;
+}
+
+.guide-section .emoji-icon {
+    font-size: 20px;
+    margin-right: 4px;
+}
+
+.guide-tip {
+    background: rgba(61, 220, 132, 0.1);
+    border: 1px solid var(--secondary);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.guide-tip strong {
+    color: var(--secondary);
+}
+
+.guide-warning {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.guide-warning strong {
+    color: var(--danger);
+}
+
+.guide-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.guide-container::-webkit-scrollbar {
+    display: none;
+}
+
+.recipe-book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.recipe-book-header button {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.recipe-book-header button:hover {
+    color: var(--danger);
 }
 
 /* ======= GAME OVER ======= */
@@ -1577,6 +2285,122 @@ body {
     background: var(--accent);
 }
 
+/* ======= COUNTDOWN OVERLAY ======= */
+.countdown-overlay {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(26, 26, 46, 0.85) 0%, rgba(15, 12, 41, 0.98) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+}
+
+.countdown-content {
+    text-align: center;
+    position: relative;
+    z-index: 5;
+    animation: contentEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.countdown-logo {
+    font-family: var(--font-display);
+    font-size: clamp(60px, 10vw, 120px);
+    line-height: 0.85;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #FF6B35 0%, #FFD23F 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 30px rgba(255, 107, 53, 0.4));
+    animation: logoFloat 3s ease-in-out infinite alternate;
+}
+
+.countdown-message {
+    font-size: clamp(18px, 2vw, 28px);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5em;
+    color: var(--primary);
+    margin-bottom: 1rem;
+    opacity: 0.9;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.countdown-number {
+    font-family: var(--font-display);
+    font-size: clamp(120px, 25vw, 320px);
+    color: #FFD23F;
+    text-shadow:
+        0 0 20px rgba(255, 210, 63, 0.5),
+        0 10px 40px rgba(255, 107, 53, 0.4);
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+}
+
+.countdown-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+@keyframes contentEntrance {
+    from {
+        transform: scale(0.8) translateY(50px);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes logoFloat {
+    from {
+        transform: translateY(0) scale(1.0);
+    }
+
+    to {
+        transform: translateY(-15px) scale(1.02);
+    }
+}
+
+/* We will re-apply an animation to number in JS for each tick */
+.number-pop {
+    animation: numberPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes numberPopIn {
+    0% {
+        transform: scale(0.2) rotate(-10deg);
+        opacity: 0;
+        filter: blur(10px);
+    }
+
+    50% {
+        transform: scale(1.1) rotate(5deg);
+        opacity: 1;
+        filter: blur(0);
+    }
+
+    100% {
+        transform: scale(1) rotate(0);
+        opacity: 1;
+    }
+}
+
+.countdown-overlay.hidden {
+    display: none !important;
+}
+
 /* Modals */
 .modal {
     position: fixed;
@@ -1585,7 +2409,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 1000;
     backdrop-filter: blur(5px);
 }
 
@@ -1766,6 +2590,54 @@ body {
     font-size: 32px;
 }
 
+/* Kick Button */
+.btn-kick {
+    padding: 6px 10px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 6px;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-kick:hover {
+    background: var(--danger);
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Refresh Button */
+.btn-refresh {
+    padding: 10px 20px;
+    background: rgba(61, 220, 132, 0.2);
+    border: 2px solid rgba(61, 220, 132, 0.4);
+    border-radius: var(--radius-sm);
+    color: var(--secondary);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-refresh:hover {
+    background: var(--secondary);
+    color: var(--bg-dark);
+    border-color: var(--secondary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(61, 220, 132, 0.3);
+}
+
+.btn-refresh:active {
+    transform: translateY(0);
+}
+
 /* Input Group Checkbox */
 .input-group label input[type="checkbox"] {
     margin-right: 8px;
@@ -1798,5 +2670,444 @@ body {
     .quick-chat-btn {
         width: 100%;
         justify-content: center;
+    }
+}
+
+
+/* Hide all scrollbars globally but keep functionality */
+.guide-book::-webkit-scrollbar {
+    display: none;
+}
+
+.guide-book {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+
+/* ======= RESPONSIVE GAME HUD ======= */
+@media (max-width: 768px) {
+    .hud {
+        padding: 8px 12px;
+    }
+    
+    .hud-top-left {
+        top: 10px;
+        left: 12px;
+        width: 250px;
+        gap: 8px;
+    }
+    
+    .hud-top-right {
+        top: 10px;
+        right: 12px;
+        gap: 6px;
+    }
+    
+    .hud-score {
+        padding: 4px 12px;
+        min-width: 80px;
+    }
+    
+    .score-label {
+        font-size: 9px;
+        letter-spacing: 1px;
+    }
+    
+    .score-value {
+        font-size: 24px;
+    }
+    
+    .hud-timer {
+        padding: 4px 12px;
+    }
+    
+    .timer-icon {
+        font-size: 16px;
+    }
+    
+    .timer-value {
+        font-size: 22px;
+        min-width: 50px;
+    }
+    
+    .hud-combo {
+        font-size: 16px;
+    }
+    
+    .hud-holding {
+        padding: 4px 10px;
+        min-width: 120px;
+    }
+    
+    .holding-label {
+        font-size: 9px;
+        letter-spacing: 1px;
+    }
+    
+    .holding-display {
+        font-size: 14px;
+    }
+    
+    .hud-player-tag {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    .orders-bar {
+        top: 10px;
+        padding: 3px 10px;
+        scale: 0.85;
+    }
+    
+    .orders-label {
+        font-size: 10px;
+    }
+    
+    .order-card {
+        padding: 6px;
+        min-width: 80px;
+    }
+    
+    .order-emoji {
+        font-size: 20px;
+    }
+    
+    .order-name {
+        font-size: 10px;
+    }
+    
+    .order-ingredients {
+        font-size: 12px;
+    }
+    
+    .order-points {
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .hud {
+        padding: 6px 8px;
+    }
+    
+    .hud-top-left {
+        top: 8px;
+        left: 8px;
+        width: 200px;
+        gap: 6px;
+    }
+    
+    .hud-top-right {
+        top: 8px;
+        right: 8px;
+        gap: 4px;
+    }
+    
+    .hud-row {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .hud-score {
+        padding: 3px 10px;
+        min-width: 70px;
+    }
+    
+    .score-label {
+        font-size: 8px;
+        letter-spacing: 0.5px;
+    }
+    
+    .score-value {
+        font-size: 20px;
+    }
+    
+    .hud-timer {
+        padding: 3px 10px;
+    }
+    
+    .timer-icon {
+        font-size: 14px;
+    }
+    
+    .timer-value {
+        font-size: 18px;
+        min-width: 45px;
+    }
+    
+    .hud-combo {
+        font-size: 14px;
+    }
+    
+    .hud-holding {
+        padding: 3px 8px;
+        min-width: 100px;
+    }
+    
+    .holding-label {
+        font-size: 8px;
+        letter-spacing: 0.5px;
+    }
+    
+    .holding-display {
+        font-size: 12px;
+    }
+    
+    .hud-player-tag {
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+    
+    .hud-player-list {
+        gap: 3px;
+    }
+    
+    .orders-bar {
+        top: 8px;
+        padding: 2px 8px;
+        scale: 0.75;
+        max-width: calc(100vw - 16px);
+    }
+    
+    .orders-label {
+        font-size: 9px;
+    }
+    
+    .orders-list {
+        gap: 4px;
+        overflow-x: auto;
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    
+    .orders-list::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .order-card {
+        padding: 4px;
+        min-width: 70px;
+    }
+    
+    .order-emoji {
+        font-size: 18px;
+    }
+    
+    .order-name {
+        font-size: 9px;
+    }
+    
+    .order-ingredients {
+        font-size: 11px;
+    }
+    
+    .order-points {
+        font-size: 9px;
+    }
+    
+    /* Hide chat log on mobile to save space */
+    .hud-chat-log {
+        max-height: 100px;
+        overflow: hidden;
+    }
+    
+    /* Smaller connection quality indicator */
+    .connection-quality {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+    
+    /* Adjust VS scoreboard for mobile */
+    .vs-scoreboard {
+        max-width: 180px;
+        font-size: 11px;
+    }
+}
+
+/* Responsive quick chat sidebar */
+@media (max-width: 768px) {
+    .quick-chat-sidebar {
+        right: 8px;
+        gap: 6px;
+    }
+    
+    .side-chat-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+    
+    .key-hint {
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 480px) {
+    .quick-chat-sidebar {
+        right: 4px;
+        gap: 4px;
+        bottom: 60px;
+    }
+    
+    .side-chat-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+    
+    .key-hint {
+        font-size: 8px;
+    }
+}
+
+/* Responsive notifications */
+@media (max-width: 768px) {
+    .notifications {
+        top: 10px;
+        right: 10px;
+        max-width: 280px;
+    }
+    
+    .notification {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .notifications {
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        max-width: calc(100vw - 16px);
+    }
+    
+    .notification {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+}
+
+/* Responsive floating chat input */
+@media (max-width: 768px) {
+    .floating-chat-container {
+        bottom: 15px;
+        left: 15px;
+        right: 15px;
+        max-width: calc(100vw - 30px);
+    }
+    
+    .floating-chat-container input {
+        font-size: 14px;
+        padding: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .floating-chat-container {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        max-width: calc(100vw - 20px);
+    }
+    
+    .floating-chat-container input {
+        font-size: 13px;
+        padding: 8px;
+    }
+    
+    .floating-chat-container button {
+        padding: 8px 12px;
+    }
+}
+
+/* Responsive game over screen */
+@media (max-width: 768px) {
+    .gameover-container {
+        padding: 30px;
+        max-width: 90%;
+    }
+    
+    .gameover-title {
+        font-size: 36px;
+    }
+    
+    .final-score {
+        font-size: 64px;
+    }
+    
+    .score-label-big {
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .gameover-container {
+        padding: 20px;
+        max-width: 95%;
+    }
+    
+    .gameover-title {
+        font-size: 28px;
+    }
+    
+    .final-score {
+        font-size: 48px;
+    }
+    
+    .score-label-big {
+        font-size: 16px;
+    }
+    
+    .stat-card {
+        padding: 12px;
+    }
+    
+    .stat-value {
+        font-size: 28px;
+    }
+    
+    .stat-label {
+        font-size: 11px;
+    }
+    
+    .btn-restart {
+        padding: 12px 24px;
+        font-size: 16px;
+    }
+}
+
+/* Responsive pause menu */
+@media (max-width: 768px) {
+    .pause-content {
+        padding: 30px;
+        max-width: 90%;
+    }
+    
+    .pause-content h2 {
+        font-size: 32px;
+    }
+    
+    .pause-content button {
+        padding: 12px 24px;
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pause-content {
+        padding: 20px;
+        max-width: 95%;
+    }
+    
+    .pause-content h2 {
+        font-size: 24px;
+    }
+    
+    .pause-content button {
+        padding: 10px 20px;
+        font-size: 14px;
+        width: 100%;
     }
 }

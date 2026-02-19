@@ -61,6 +61,7 @@ let moveTimer = 0;
 let lastChopEmit = 0;
 let spacePressedTime = 0;
 let didChop = false; // Restored for interaction logic
+let isPaused = false;
 
 // ============ LOBBY LOGIC ============
 // ============ LOBBY LOGIC ============
@@ -195,10 +196,7 @@ window.togglePasswordField = () => {
     if (!checkbox.checked) passwordInput.value = '';
 };
 
-// Quick Chat
-window.sendQuickChat = (message) => {
-    socket.emit('chatMessage', message);
-};
+
 
 // Server Filters
 window.applyFilters = () => {
@@ -239,9 +237,14 @@ window.closePasswordModal = () => {
 
 window.submitPassword = () => {
     const password = document.getElementById('room-password-input').value.trim();
-    if (password) {
-        socket.emit('joinRoomWithPassword', { password });
+    const roomId = window.pendingRoomId;
+    const name = document.getElementById('player-name').value.trim() || 'Chef';
+    
+    if (password && roomId) {
+        // Retry joining with the password
+        socket.emit('joinRoom', { name, roomId, password });
         closePasswordModal();
+        window.pendingRoomId = null;
     }
 };
 
@@ -463,11 +466,12 @@ socket.on('init', (data) => {
         if (roomState.mode !== 'single') {
             const waitingMenu = document.getElementById('menu-waiting');
             if (waitingMenu) waitingMenu.classList.remove('hidden');
-        } else {
-            // For single player, ensure lobby screen is hidden (in case it wasn't already)
+        }
+
+        if (roomState.mode === 'single' || roomState.state === 'playing') {
             const lobbyScreen = document.getElementById('lobby-screen');
-            if (lobbyScreen) lobbyScreen.classList.remove('active');
             const gameScreen = document.getElementById('game-screen');
+            if (lobbyScreen) lobbyScreen.classList.remove('active');
             if (gameScreen) gameScreen.classList.add('active');
         }
 
@@ -543,6 +547,12 @@ socket.on('playerJoined', (player) => {
     if (ui && typeof ui.updatePlayerList === 'function') {
         ui.updatePlayerList(roomState.players);
     }
+
+    addHudChatLine({
+        sender: 'SYSTEM',
+        message: `${player.name} joined the kitchen!`,
+        color: '#3DDC84'
+    });
 
     // Update Waiting Room User List
     updateWaitingList(roomState.players);
@@ -641,6 +651,14 @@ function setupCamera(config) {
 
 socket.on('playerLeft', (id) => {
     if (!roomState) return;
+    const player = roomState.players[id];
+    if (player) {
+        addHudChatLine({
+            sender: 'SYSTEM',
+            message: `${player.name} left the kitchen.`,
+            color: '#EF4444'
+        });
+    }
     delete roomState.players[id];
     removePlayerMesh(id);
     ui.updatePlayerList(roomState.players);
@@ -797,10 +815,14 @@ socket.on('orderCompleted', (data) => {
     if (!roomState || !gameConfig) return;
     roomState.orders = roomState.orders.filter(o => o.id !== data.orderId);
     roomState.score = data.totalScore;
+    if (roomState && roomState.players[data.playerId]) {
+        roomState.players[data.playerId].score = data.playerScore;
+    }
     if (ui) {
         if (typeof ui.updateOrders === 'function') ui.updateOrders(roomState.orders, gameConfig);
         if (typeof ui.updateScore === 'function') ui.updateScore(data.totalScore, data.combo);
         if (typeof ui.showScorePop === 'function') ui.showScorePop(`+${data.points}`);
+        if (typeof ui.updatePlayerList === 'function') ui.updatePlayerList(roomState.players);
     }
 });
 
@@ -877,6 +899,20 @@ socket.on('gameOver', (data) => {
     }
 });
 
+socket.on('gamePaused', (data) => {
+    console.log('✅ Received gamePaused from server', data);
+    if (roomState) {
+        roomState.isPaused = true;
+    }
+});
+
+socket.on('gameResumed', (data) => {
+    console.log('✅ Received gameResumed from server', data);
+    if (roomState) {
+        roomState.isPaused = false;
+    }
+});
+
 socket.on('gameStateUpdate', (data) => {
     if (!roomState) return;
     roomState.stations = data.stations;
@@ -892,10 +928,42 @@ socket.on('gameStateUpdate', (data) => {
 });
 
 socket.on('chatMessage', (data) => {
-    if (ui && typeof ui.addChatMessage === 'function') {
-        ui.addChatMessage(data);
-    }
+    // Render speech bubble directly in 3D world
+    renderSpeechBubble(data);
+    // Add to HUD chat log
+    addHudChatLine(data);
 });
+
+function addHudChatLine(data) {
+    const log = document.getElementById('hud-chat-log');
+    if (!log) return;
+
+    const line = document.createElement('div');
+    line.className = 'hud-chat-line';
+
+    if (data.sender === 'SYSTEM') {
+        line.classList.add('system');
+        line.style.color = data.color || '#94a3b8';
+        line.innerHTML = `<i class="bi bi-info-circle-fill"></i> ${data.message}`;
+    } else {
+        line.innerHTML = `<span class="sender" style="color:${data.color}">${data.sender}:</span> ${data.message}`;
+    }
+
+    log.appendChild(line);
+
+    // Fade out and remove after some time
+    setTimeout(() => {
+        line.style.opacity = '0';
+        line.style.transform = 'translateX(-10px)';
+        line.style.transition = 'all 0.5s ease';
+        setTimeout(() => line.remove(), 500);
+    }, 6000);
+
+    // Keep log short
+    while (log.children.length > 5) {
+        log.removeChild(log.firstChild);
+    }
+}
 socket.on('playerRenamed', (data) => {
     if (roomState && roomState.players[data.id]) {
         roomState.players[data.id].name = data.name;
@@ -1066,17 +1134,136 @@ window.inviteFriend = (friendId) => {
     }
 };
 
+// ============ PAUSE & LEAVE ============
+window.togglePauseMenu = () => {
+    if (!roomState || roomState.state !== 'playing') return;
+
+    const pauseMenu = document.getElementById('pause-menu');
+    if (!pauseMenu) return;
+
+    // Check if currently hidden
+    const isHidden = pauseMenu.classList.contains('hidden');
+
+    if (isHidden) {
+        // OPEN MENU
+        pauseMenu.classList.remove('hidden');
+
+        const resumeBtn = document.getElementById('btn-resume');
+        const title = pauseMenu.querySelector('h2');
+
+        if (roomState.mode === 'single') {
+            // SINGLE PLAYER: PAUSE GAME
+            isPaused = true;
+            console.log('⏸️ Emitting pauseGame to server');
+            socket.emit('pauseGame'); // Tell server to pause timers
+            if (resumeBtn) resumeBtn.style.display = 'inline-block';
+            if (title) title.innerHTML = '<i class="bi bi-pause-circle"></i> Paused';
+        } else {
+            // MULTIPLAYER: NO PAUSE, JUST MENU
+            isPaused = false;
+            if (resumeBtn) resumeBtn.style.display = 'none'; // Only "Close" via Escape or interaction
+            if (title) title.innerHTML = '<i class="bi bi-list"></i> Menu';
+        }
+    } else {
+        // CLOSE MENU
+        window.resumeGame();
+    }
+};
+
+window.resumeGame = () => {
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) pauseMenu.classList.add('hidden');
+    
+    if (roomState && roomState.mode === 'single' && isPaused) {
+        console.log('▶️ Emitting resumeGame to server');
+        socket.emit('resumeGame'); // Tell server to resume timers
+    }
+    
+    isPaused = false;
+};
+
+window.leaveRoom = () => {
+    if (roomState) {
+        // Notify server
+        socket.emit('leaveRoom', { roomId: roomState.id });
+        roomState = null;
+    }
+
+    window.resumeGame(); // Clear pause state
+
+    // Reset UI
+    const gameScreen = document.getElementById('game-screen');
+    const lobbyScreen = document.getElementById('lobby-screen');
+    const gameoverScreen = document.getElementById('gameover-screen');
+    const pauseMenu = document.getElementById('pause-menu'); // Ensure hidden
+
+    if (gameScreen) gameScreen.classList.remove('active');
+    if (gameoverScreen) gameoverScreen.classList.remove('active');
+    if (pauseMenu) pauseMenu.classList.add('hidden');
+    if (lobbyScreen) lobbyScreen.classList.add('active');
+
+    // Reset Camera
+    if (typeof camera !== 'undefined') {
+        camera.position.set(0, 30, 30);
+        camera.lookAt(0, 0, 0);
+    }
+
+    // Show Main Menu
+    if (typeof showMenu === 'function') showMenu('main');
+};
+
 // Game Countdown
 socket.on('gameCountdown', (data) => {
     const countdown = data.countdown;
-    if (countdown > 0) {
+    const overlay = document.getElementById('countdown-overlay');
+    const numberEl = document.getElementById('countdown-number');
+    const messageEl = document.getElementById('countdown-text');
+
+    if (overlay) overlay.classList.remove('hidden');
+
+    // MOVED: Switch to game screen IMMEDIATELY on countdown start
+    // This makes the loading overlay appear over the kitchen
+    if (countdown >= 4) {
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const gameScreen = document.getElementById('game-screen');
+        if (lobbyScreen) lobbyScreen.classList.remove('active');
+        if (gameScreen) gameScreen.classList.add('active');
+    }
+
+    if (countdown >= 4) {
+        if (numberEl) numberEl.textContent = "...";
+        if (messageEl) messageEl.textContent = "INITIALIZING DATA...";
+    } else if (countdown > 0) {
+        if (numberEl) {
+            numberEl.textContent = countdown;
+            // Force re-trigger animation
+            numberEl.classList.remove('number-pop');
+            void numberEl.offsetWidth; // trigger reflow
+            numberEl.classList.add('number-pop');
+        }
+        if (messageEl) messageEl.textContent = 'GET READY!';
+
         if (ui && typeof ui.showNotification === 'function') {
             ui.showNotification(`Game starting in ${countdown}...`, 'info');
         }
     } else {
+        if (numberEl) {
+            numberEl.textContent = "GO!";
+            numberEl.classList.remove('number-pop');
+            void numberEl.offsetWidth; // trigger reflow
+            numberEl.classList.add('number-pop');
+        }
+        if (messageEl) messageEl.textContent = "START COOKING!";
+
         if (ui && typeof ui.showNotification === 'function') {
             ui.showNotification('Game starting!', 'success');
         }
+
+        // Hide overlay after a short delay so "GO!" is visible
+        setTimeout(() => {
+            if (overlay) overlay.classList.add('hidden');
+        }, 1000);
+
         // Ensure pause menu is hidden
         const pauseMenu = document.getElementById('pause-menu');
         if (pauseMenu) pauseMenu.classList.add('hidden');
@@ -1178,6 +1365,11 @@ function removePlayerMesh(id) {
 // ============ INPUT ============
 document.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
+
+    if (e.key === 'Escape') {
+        togglePauseMenu();
+    }
+
     if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         // Start hold timer on first press
@@ -1350,6 +1542,8 @@ const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+
+    if (isPaused) return;
 
     if (roomState && roomState.state === 'playing' && gameConfig) {
         const me = roomState.players[playerId];
@@ -1525,6 +1719,27 @@ function animate() {
         ui.updateOrderTimers(roomState.orders);
     }
 
+    // --- CAMERA FOLLOW LOCAL PLAYER ---
+    if (playerId && playerMeshes[playerId]) {
+        const pm = playerMeshes[playerId];
+
+        // Define desired camera offset relative to player
+        // High angle, centered
+        const targetHeight = 22;
+        const targetDist = 20;
+
+        const targetX = pm.group.position.x;
+        const targetZ = pm.group.position.z + targetDist;
+
+        // Smoothly interpolate camera position
+        camera.position.x += (targetX - camera.position.x) * 0.08;
+        camera.position.z += (targetZ - camera.position.z) * 0.08;
+        camera.position.y += (targetHeight - camera.position.y) * 0.08;
+
+        // Ensure camera looks at the player's position (ground level)
+        camera.lookAt(camera.position.x, 0, camera.position.z - targetDist);
+    }
+
     renderer.render(scene, camera);
 }
 
@@ -1576,6 +1791,159 @@ function checkCollision(x, z, ts) {
     return false;
 }
 
+// ============ QUICK CHAT & SHORTCUTS ============
+window.sendQuickChat = (msg) => {
+    if (socket) socket.emit('chatMessage', msg);
+};
+
+window.toggleChatInput = () => {
+    const container = document.getElementById('floating-chat-input');
+    const input = document.getElementById('chat-input');
+    if (container && input) {
+        const isHidden = container.classList.contains('hidden');
+        if (isHidden) {
+            container.classList.remove('hidden');
+            input.focus();
+        } else {
+            container.classList.add('hidden');
+        }
+    }
+};
+
+document.addEventListener('keydown', (e) => {
+    // Escape or Enter handling when NOT focused on input
+    if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        if (e.key === 'Enter') {
+            toggleChatInput();
+            e.preventDefault();
+        }
+
+        if (e.key === '1') sendQuickChat('Need help!');
+        if (e.key === '2') sendQuickChat('Coming!');
+        if (e.key === '3') sendQuickChat('Thanks!');
+        if (e.key === '4') sendQuickChat('Oops!');
+    }
+});
+
+// ============ SPEECH BUBBLES ============
+function renderSpeechBubble(data) {
+    if (!data || !data.message) return;
+
+    // Find player mesh
+    let pm = playerMeshes[data.id];
+
+    // Fallback: search by name
+    if (!pm) {
+        const pId = Object.keys(roomState.players).find(id => roomState.players[id].name === data.sender);
+        if (pId) pm = playerMeshes[pId];
+    }
+
+    if (!pm || !pm.group) return;
+
+    // Remove existing bubble if any
+    const oldBubble = pm.group.getObjectByName('speechBubble');
+    if (oldBubble) {
+        pm.group.remove(oldBubble);
+        if (oldBubble.material.map) oldBubble.material.map.dispose();
+        oldBubble.material.dispose();
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Limit to 15 characters as requested
+    let msg = data.message || "";
+    if (msg.length > 15) msg = msg.substring(0, 15);
+
+    // Set font first to measure correctly
+    ctx.font = '900 60px "Fredoka One", sans-serif';
+    const textMetrics = ctx.measureText(msg);
+    const textWidth = textMetrics.width;
+
+    // Dynamic bubble width based on text
+    const padding = 80;
+    const bubbleWidth = Math.max(120, textWidth + padding);
+    const canvasWidth = bubbleWidth + 40; // Extra room for shadow
+    const canvasHeight = 180;
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    // Clear and draw bubble
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    // Shadow 
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 12;
+
+    // Center the bubble in the canvas
+    const bx = (canvasWidth - bubbleWidth) / 2;
+    const by = 10;
+    const bh = 120;
+    const br = 30;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+    ctx.beginPath();
+    if (ctx.roundRect) {
+        ctx.roundRect(bx, by, bubbleWidth, bh, br);
+    } else {
+        ctx.rect(bx, by, bubbleWidth, bh);
+    }
+    ctx.fill();
+
+    // Draw bubble tip (centered under bubble)
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(canvasWidth / 2 - 20, by + bh);
+    ctx.lineTo(canvasWidth / 2 + 20, by + bh);
+    ctx.lineTo(canvasWidth / 2, by + bh + 25);
+    ctx.fill();
+
+    // Text (Centered)
+    ctx.fillStyle = '#1e293b';
+    ctx.font = '900 60px "Fredoka One", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(msg, canvasWidth / 2, by + bh / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+
+    const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false
+    });
+
+    const sprite = new THREE.Sprite(material);
+    sprite.name = 'speechBubble';
+    sprite.renderOrder = 9999;
+
+    // Sprite scale matches the canvas aspect ratio
+    const worldScaleH = 1.35;
+    const worldScaleW = (canvasWidth / canvasHeight) * worldScaleH;
+    sprite.scale.set(worldScaleW, worldScaleH, 1);
+    sprite.position.y = 3.6;
+
+    pm.group.add(sprite);
+
+    // Fade and remove animation
+    setTimeout(() => {
+        let opacity = 1.0;
+        const fade = setInterval(() => {
+            opacity -= 0.08;
+            if (material) material.opacity = opacity;
+            if (opacity <= 0) {
+                clearInterval(fade);
+                if (pm && pm.group) pm.group.remove(sprite);
+                texture.dispose();
+                material.dispose();
+            }
+        }, 30);
+    }, 4500);
+}
+
 // ============ HELD ITEM VISUALS ============
 function updatePlayerHeldItem(playerId, holding) {
     const pm = playerMeshes[playerId];
@@ -1622,4 +1990,199 @@ function updatePlayerHeldItem(playerId, holding) {
     }
 
     pm.group.add(heldGroup);
+}
+
+
+// ============ GUIDE BOOK ============
+window.showGuideBook = () => {
+    showMenu('guide');
+    populateGuideContent();
+};
+
+function populateGuideContent() {
+    const container = document.getElementById('lobby-guide-content');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🎮</span> Game Controls</h4>
+            <ul>
+                <li><strong>WASD / Arrow Keys</strong> - Move your chef</li>
+                <li><strong>SPACE</strong> - Interact with stations / Hold to chop/cook/wash/roll</li>
+                <li><strong>E</strong> - Pick up / Place items</li>
+                <li><strong>Q</strong> - Drop item in trash</li>
+                <li><strong>ENTER</strong> - Open chat</li>
+                <li><strong>1-4</strong> - Quick chat messages</li>
+                <li><strong>TAB</strong> - Toggle recipe book</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🍳</span> How to Cook</h4>
+            <p>Follow these steps to prepare dishes:</p>
+            <ol style="list-style: decimal; padding-left: 24px;">
+                <li><strong>Get a Plate</strong> - Pick up from Plates Station</li>
+                <li><strong>Gather Ingredients</strong> - Get from ingredient crates</li>
+                <li><strong>Process Ingredients</strong> - Chop, cook, wash, or roll as needed</li>
+                <li><strong>Assemble Dish</strong> - Add all ingredients to plate</li>
+                <li><strong>Serve</strong> - Deliver at Serving Station</li>
+            </ol>
+            <div class="guide-tip">
+                <strong>💡 Tip:</strong> Check the Recipe Book (bottom right) to see what each dish needs!
+            </div>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🔪</span> Processing Stations</h4>
+            <ul>
+                <li><strong>Chopping Board</strong> - Chop vegetables, meat, fish (hold SPACE)</li>
+                <li><strong>Stove</strong> - Cook meat, fish, rice, or complete dishes</li>
+                <li><strong>Oven</strong> - Cook pizza (dough must be rolled first!)</li>
+                <li><strong>Roller</strong> - Roll dough for pizza (hold SPACE)</li>
+                <li><strong>Sink</strong> - Wash rice before cooking (hold SPACE)</li>
+                <li><strong>Counter</strong> - Temporary storage for ingredients</li>
+                <li><strong>Trash</strong> - Dispose of burnt or wrong items</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">📋</span> Recipe Types</h4>
+            <p><strong>Type A: Cook First, Then Assemble</strong></p>
+            <ul>
+                <li>🍔 <strong>Burger</strong> - Cook meat separately, then add to plate with veggies</li>
+                <li>🌮 <strong>Fish Tacos</strong> - Cook fish separately, then assemble</li>
+            </ul>
+            <p style="margin-top: 12px;"><strong>Type B: Assemble First, Then Cook Together</strong></p>
+            <ul>
+                <li>🍲 <strong>Soup</strong> - Chop all veggies, add to plate, cook together</li>
+                <li>🍳 <strong>Omelette</strong> - Add all ingredients to plate, cook together</li>
+                <li>🥩 <strong>Steak & Mushroom</strong> - Chop all, add to plate, cook together</li>
+            </ul>
+            <p style="margin-top: 12px;"><strong>Type C: No Cooking</strong></p>
+            <ul>
+                <li>🥗 <strong>Salad</strong> - Just chop vegetables and assemble</li>
+            </ul>
+            <p style="margin-top: 12px;"><strong>Type D: Special Processing</strong></p>
+            <ul>
+                <li>🍣 <strong>Sushi</strong> - Wash rice → Cook rice → Chop fish (don't cook fish!)</li>
+                <li>🍕 <strong>Pizza</strong> - Roll dough → Chop toppings → Assemble → Cook in OVEN</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">⚠️</span> Important Rules</h4>
+            <div class="guide-warning">
+                <strong>❌ Common Mistakes:</strong>
+                <ul style="margin-top: 8px;">
+                    <li>Cannot cook meat/fish without chopping first</li>
+                    <li>Cannot add unchopped vegetables to plate</li>
+                    <li>Cannot cook rice without washing first</li>
+                    <li>Cannot cook dough on stove (use oven!)</li>
+                    <li>Cannot cook pizza without rolling dough first</li>
+                    <li>Bread and lettuce don't need cooking</li>
+                </ul>
+            </div>
+            <div class="guide-tip" style="margin-top: 12px;">
+                <strong>✅ Pro Tips:</strong>
+                <ul style="margin-top: 8px;">
+                    <li>Work together in Co-op mode - divide tasks!</li>
+                    <li>Watch order timers - urgent orders glow red</li>
+                    <li>Combo multiplier increases with consecutive orders</li>
+                    <li>Don't let food burn - pick it up when cooked!</li>
+                    <li>Use counters to organize ingredients</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🏆</span> Scoring</h4>
+            <ul>
+                <li><strong>Base Points</strong> - Each dish has a base point value</li>
+                <li><strong>Combo Multiplier</strong> - Serve orders consecutively for bonus points</li>
+                <li><strong>Time Bonus</strong> - Serve quickly for extra tip</li>
+                <li><strong>Freshness Bonus</strong> - Serve within 15 seconds of plating</li>
+                <li><strong>Seasoning Bonus</strong> - Add salt/sauce for +8 points</li>
+            </ul>
+            <div class="guide-warning" style="margin-top: 12px;">
+                <strong>⚠️ Penalties:</strong>
+                <ul style="margin-top: 8px;">
+                    <li>Wrong dish: -3 points</li>
+                    <li>Expired order: -5 points</li>
+                    <li>Combo resets to 0</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🎯</span> Game Modes</h4>
+            <ul>
+                <li><strong>Single Player</strong> - Practice alone, learn recipes</li>
+                <li><strong>Co-op (Max 3)</strong> - Work together, shared score</li>
+                <li><strong>VS (Max 2)</strong> - Compete for highest individual score</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">💬</span> Communication</h4>
+            <ul>
+                <li><strong>Text Chat</strong> - Press ENTER to type messages</li>
+                <li><strong>Quick Chat</strong> - Press 1-4 for preset messages</li>
+                <li><strong>Room Code</strong> - Share 6-digit code to invite friends</li>
+            </ul>
+        </div>
+    `;
+}
+
+// In-game guide book toggle
+const btnGuideToggle = document.getElementById('btn-guide-toggle');
+if (btnGuideToggle) {
+    btnGuideToggle.addEventListener('click', () => {
+        const guideBook = document.getElementById('guide-book');
+        if (guideBook) {
+            guideBook.classList.toggle('hidden');
+            if (!guideBook.classList.contains('hidden')) {
+                populateInGameGuide();
+            }
+        }
+    });
+}
+
+function populateInGameGuide() {
+    const container = document.getElementById('guide-content');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="guide-section">
+            <h4><span class="emoji-icon">🎮</span> Controls</h4>
+            <ul>
+                <li><strong>WASD / Arrows</strong> - Move</li>
+                <li><strong>SPACE</strong> - Interact / Hold to process</li>
+                <li><strong>ENTER</strong> - Chat</li>
+                <li><strong>1-4</strong> - Quick chat</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">⚠️</span> Quick Rules</h4>
+            <ul>
+                <li>Chop before cooking</li>
+                <li>Wash rice before cooking</li>
+                <li>Roll dough before plating</li>
+                <li>Cook meat/fish before plating (burger/tacos)</li>
+                <li>Assemble then cook (soup/omelette/steak)</li>
+                <li>Pizza goes in OVEN, not stove</li>
+            </ul>
+        </div>
+
+        <div class="guide-section">
+            <h4><span class="emoji-icon">💡</span> Tips</h4>
+            <ul>
+                <li>Watch order timers</li>
+                <li>Build combos for bonus points</li>
+                <li>Don't let food burn</li>
+                <li>Use counters to organize</li>
+                <li>Communicate with team</li>
+            </ul>
+        </div>
+    `;
 }

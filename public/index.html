@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cooking NangInamo - Multiplayer Kitchen Chaos!</title>
+    <title>Cooking Inamo - Multiplayer Kitchen Chaos!</title>
     <meta name="description"
         content="An Overcooked-style isometric 3D cooking battle game. Cook, chop, and serve dishes in a chaotic multiplayer kitchen!">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,7 +23,7 @@
             <div class="logo-container">
                 <h1 class="game-logo">
                     <i class="bi bi-egg-fried logo-icon"></i>
-                    <span class="logo-text">COOKING<br>NANGINAMO</span>
+                    <span class="logo-text">COOKING<br>INAMO</span>
                     <i class="bi bi-fire logo-icon"></i>
                 </h1>
                 <p class="logo-subtitle">Multiplayer Kitchen Chaos!</p>
@@ -70,6 +70,13 @@
                         <span class="btn-desc">Manage friends</span>
                     </div>
                 </button>
+                <button class="menu-btn" onclick="showGuideBook()">
+                    <i class="bi bi-info-circle-fill btn-icon"></i>
+                    <div class="btn-text">
+                        <span class="btn-title">How to Play</span>
+                        <span class="btn-desc">Cooking guide & tips</span>
+                    </div>
+                </button>
             </div>
 
             <!-- MENU 2: SINGLE PLAYER SETUP -->
@@ -77,12 +84,10 @@
                 <h2 class="menu-title">Select Difficulty</h2>
                 <div class="banner-options">
                     <div class="banner-option" onclick="selectDifficulty('easy', this)">
-                        <i class="bi bi-circle-fill banner-icon" style="color: #2ecc71;"></i>
                         <h3>Easy</h3>
                         <p>Relaxed cooking</p>
                     </div>
                     <div class="banner-option" onclick="selectDifficulty('hard', this)">
-                        <i class="bi bi-circle-fill banner-icon" style="color: #e74c3c;"></i>
                         <h3>Hard</h3>
                         <p>Chaotic kitchen!</p>
                     </div>
@@ -217,6 +222,18 @@
                 </div>
             </div>
 
+            <!-- MENU 6: GUIDE BOOK -->
+            <div id="menu-guide" class="lobby-menu hidden">
+                <h2 class="menu-title"><i class="bi bi-info-circle-fill"></i> How to Play</h2>
+                <div class="guide-container" id="lobby-guide-content">
+                    <!-- Guide content will be populated here -->
+                </div>
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i>
+                        Back</button>
+                </div>
+            </div>
+
             <!-- WAITING ROOM (After joining/creating) -->
             <div id="menu-waiting" class="lobby-menu hidden">
                 <h2 class="menu-title" id="waiting-room-name">Room: ...</h2>
@@ -262,44 +279,80 @@
         </div>
     </div>
 
-    <!-- ========== GAME SCREEN ========== -->
     <div id="game-screen" class="screen">
         <!-- HUD -->
         <div id="hud" class="hud">
-            <div class="hud-left">
-                <div class="hud-score" id="hud-score">
-                    <span class="score-label"><i class="bi bi-trophy"></i> SCORE</span>
-                    <span class="score-value" id="score-value">0</span>
+            <!-- HUD TOP LEFT: Score, Timer -->
+            <div class="hud-top-left">
+                <div class="hud-row">
+                    <div class="hud-score" id="hud-score">
+                        <span class="score-label"><i class="bi bi-trophy"></i> SCORE</span>
+                        <span class="score-value" id="score-value">0</span>
+                    </div>
+                    <div class="hud-timer" id="hud-timer">
+                        <i class="bi bi-stopwatch timer-icon"></i>
+                        <span class="timer-value" id="timer-value">3:00</span>
+                    </div>
+                    <div class="hud-combo" id="hud-combo">
+                        <span id="combo-value"></span>
+                    </div>
                 </div>
-                <div class="hud-combo" id="hud-combo">
-                    <span id="combo-value"></span>
-                </div>
-                <!-- VS MODE SCOREBOARD -->
+
+                <!-- VS MODE SCOREBOARD (Floating below) -->
                 <div id="vs-scoreboard" class="vs-scoreboard hidden">
                     <div class="scoreboard-title"><i class="bi bi-trophy-fill"></i> Scores</div>
                     <div id="vs-scores-list"></div>
                 </div>
+
+                <!-- CHAT LOG (Recent messages) -->
+                <div id="hud-chat-log" class="hud-chat-log"></div>
             </div>
-            <div class="hud-center">
-                <div class="hud-timer" id="hud-timer">
-                    <i class="bi bi-stopwatch timer-icon"></i>
-                    <span class="timer-value" id="timer-value">3:00</span>
+
+            <!-- QUICK CHAT SIDEBAR: Vertical buttons on the right -->
+            <div class="quick-chat-sidebar">
+                <button class="side-chat-btn" onclick="toggleChatInput()" title="Text Chat (Enter)">
+                    <i class="bi bi-chat-fill"></i>
+                </button>
+                <div class="side-chat-divider"></div>
+                <button class="side-chat-btn" onclick="sendQuickChat('Need help!')" title="Help (1)">
+                    <span class="key-hint">1</span> <i class="bi bi-exclamation-circle"></i>
+                </button>
+                <button class="side-chat-btn" onclick="sendQuickChat('Coming!')" title="Coming (2)">
+                    <span class="key-hint">2</span> <i class="bi bi-arrow-right-circle"></i>
+                </button>
+                <button class="side-chat-btn" onclick="sendQuickChat('Thanks!')" title="Thanks (3)">
+                    <span class="key-hint">3</span> <i class="bi bi-heart"></i>
+                </button>
+                <button class="side-chat-btn" onclick="sendQuickChat('Oops!')" title="Oops (4)">
+                    <span class="key-hint">4</span> <i class="bi bi-emoji-frown"></i>
+                </button>
+            </div>
+
+            <!-- Dedicated Chat Input (Floating/Centered) -->
+            <div id="floating-chat-input" class="floating-chat-container hidden">
+                <input type="text" id="chat-input" placeholder="Say something..." maxlength="50">
+                <button id="chat-send"><i class="bi bi-send-fill"></i></button>
+            </div>
+
+            <!-- HUD TOP RIGHT: Player Tags -->
+            <div class="hud-top-right">
+                <div id="hud-player-list" class="hud-player-list">
+                    <!-- Dynamic player tags will go here -->
                 </div>
-                <!-- CONNECTION QUALITY -->
+                <!-- HOLDING HUD -->
+                <div class="hud-holding" id="hud-holding">
+                    <span class="holding-label"><i class="bi bi-hand-index"></i> HOLDING</span>
+                    <div class="holding-display" id="holding-display">Nothing</div>
+                </div>
+                <!-- CONNECTION QUALITY: Below Holding -->
                 <div id="connection-quality" class="connection-quality">
                     <i class="bi bi-wifi" id="connection-icon"></i>
                     <span id="ping-value">--</span>ms
                 </div>
             </div>
-            <div class="hud-right">
-                <div class="hud-holding" id="hud-holding">
-                    <span class="holding-label"><i class="bi bi-hand-index"></i> Holding</span>
-                    <div class="holding-display" id="holding-display">Nothing</div>
-                </div>
-            </div>
         </div>
 
-        <!-- Orders Bar -->
+        <!-- Orders Bar (Now Center Top and smaller) -->
         <div class="orders-bar" id="orders-bar">
             <div class="orders-label"><i class="bi bi-clipboard-check"></i> ORDERS</div>
             <div class="orders-list" id="orders-list"></div>
@@ -311,54 +364,52 @@
         <!-- Notifications -->
         <div id="notifications" class="notifications"></div>
 
-        <!-- Chat -->
-        <div class="chat-container" id="chat-container">
-            <div class="chat-header">
-                <span><i class="bi bi-chat-dots"></i> Chat</span>
-                <button class="chat-toggle" onclick="toggleChat()"><i class="bi bi-chevron-down"></i></button>
-            </div>
-            <div class="chat-messages" id="chat-messages"></div>
-            <div class="quick-chat-buttons">
-                <button class="quick-chat-btn-small" onclick="sendQuickChat('Need help!')" title="Need help!">
-                    <i class="bi bi-exclamation-circle"></i>
-                </button>
-                <button class="quick-chat-btn-small" onclick="sendQuickChat('Coming!')" title="Coming!">
-                    <i class="bi bi-arrow-right-circle"></i>
-                </button>
-                <button class="quick-chat-btn-small" onclick="sendQuickChat('Thanks!')" title="Thanks!">
-                    <i class="bi bi-heart"></i>
-                </button>
-                <button class="quick-chat-btn-small" onclick="sendQuickChat('Oops!')" title="Oops!">
-                    <i class="bi bi-emoji-frown"></i>
-                </button>
-            </div>
-            <div class="chat-input-row">
-                <input type="text" id="chat-input" placeholder="Type message..." maxlength="100">
-                <button id="chat-send"><i class="bi bi-send"></i></button>
-            </div>
-        </div>
-
         <!-- Recipe Book (toggle) -->
         <button class="btn-recipe-toggle" id="btn-recipe-toggle" title="Recipe Book">
-            <i class="bi bi-book"></i>
+            <i class="bi bi-book-fill"></i>
         </button>
         <div class="recipe-book hidden" id="recipe-book">
             <div class="recipe-book-header">
-                <h3><i class="bi bi-book"></i> Recipe Book</h3>
+                <h3><i class="bi bi-book-fill"></i> Recipe Book</h3>
                 <button onclick="document.getElementById('recipe-book').classList.add('hidden')"><i
                         class="bi bi-x"></i></button>
             </div>
             <div class="recipe-list" id="recipe-list"></div>
         </div>
 
-        <!-- PAUSE MENU (Host only) - Hidden by default, shown only when paused -->
+        <!-- Guide Book (toggle) -->
+        <button class="btn-guide-toggle" id="btn-guide-toggle" title="Cooking Guide">
+            <i class="bi bi-info-circle-fill"></i>
+        </button>
+        <div class="guide-book hidden" id="guide-book">
+            <div class="guide-book-header">
+                <h3><i class="bi bi-info-circle-fill"></i> Cooking Guide</h3>
+                <button onclick="document.getElementById('guide-book').classList.add('hidden')"><i
+                        class="bi bi-x"></i></button>
+            </div>
+            <div class="guide-content" id="guide-content">
+                <!-- Guide content will be populated here -->
+            </div>
+        </div>
+
+        <!-- PAUSE MENU (Host only) -->
         <div id="pause-menu" class="pause-menu hidden">
             <div class="pause-content">
                 <h2><i class="bi bi-pause-circle"></i> Paused</h2>
-                <button class="btn-primary" onclick="resumeGame()"><i class="bi bi-play-fill"></i> Resume</button>
-                <button class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i> Leave
+                <button id="btn-resume" class="btn-primary" onclick="resumeGame()"><i class="bi bi-play-fill"></i>
+                    Resume</button>
+                <button id="btn-leave" class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i>
+                    Leave
                     Game</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ========== COUNTDOWN OVERLAY ========== -->
+    <div id="countdown-overlay" class="countdown-overlay hidden">
+        <div class="countdown-content">
+            <div id="countdown-text" class="countdown-message">Preparing Kitchen...</div>
+            <div id="countdown-number" class="countdown-number"></div>
         </div>
     </div>
 
