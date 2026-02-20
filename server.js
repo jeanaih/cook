@@ -146,7 +146,7 @@ const RECIPES = {
         name: 'Pizza',
         emoji: '🍕',
         ingredients: ['dough', 'tomato', 'cheese'],
-        requiresChopping: ['tomato'],
+        requiresChopping: ['tomato', 'cheese'],
         requiresRolling: ['dough'], // Use ROLLER first
         requiresCooking: ['dough'], // Then OVEN
         cookTime: 8000,
@@ -903,10 +903,16 @@ io.on('connection', (socket) => {
             const ingConfig = room.activeIngredients[player.holding.name];
             if (ingConfig && ingConfig.chopTime > 0 && !player.holding.chopped) {
                 station.contents = player.holding;
-                station.chopProgress = 0;
+                // PRESERVE PROGRESS: Only reset if ingredient doesn't have existing progress
+                if (typeof player.holding.chopProgress !== 'number') {
+                    station.chopProgress = 0;
+                    player.holding.chopProgress = 0;
+                } else {
+                    station.chopProgress = player.holding.chopProgress;
+                }
                 player.holding = null;
                 emitPlayerUpdate(player, room);
-                console.log(`🧼 Auto-placed ${station.contents.name} for chopping`);
+                console.log(`🧼 Auto-placed ${station.contents.name} for chopping (progress: ${station.chopProgress}%)`);
             }
         }
 
@@ -925,11 +931,19 @@ io.on('connection', (socket) => {
         const baseSpeed = ingredient.chopTime || 1000;
         const increment = 10000 / baseSpeed; // 10000 ensures chopTime is literal ms (3s = 3000ms)
         station.chopProgress += increment;
+        
+        // SAVE PROGRESS: Update ingredient's progress too
+        if (station.contents) {
+            station.contents.chopProgress = station.chopProgress;
+        }
 
         // Check completion (inclusive of slight rounding)
         if (station.chopProgress >= 98.0) {
             station.contents.chopped = true;
             station.chopProgress = 100;
+            if (station.contents) {
+                station.contents.chopProgress = 100;
+            }
             io.to(room.id).emit('chopComplete', {
                 stationId: station.id,
                 ingredient: station.contents.name,
@@ -956,7 +970,13 @@ io.on('connection', (socket) => {
         // Auto-place logic for Dough
         if (!station.contents && player.holding && player.holding.name === 'dough' && !player.holding.rolled) {
             station.contents = player.holding;
-            station.rollProgress = 0;
+            // PRESERVE PROGRESS: Only reset if dough doesn't have existing progress
+            if (typeof player.holding.rollProgress !== 'number') {
+                station.rollProgress = 0;
+                player.holding.rollProgress = 0;
+            } else {
+                station.rollProgress = player.holding.rollProgress;
+            }
             player.holding = null;
             emitPlayerUpdate(player, room);
         }
@@ -967,10 +987,18 @@ io.on('connection', (socket) => {
         const rollTime = ingConfig.rollTime || 3000;
 
         station.rollProgress += (10000 / rollTime);
+        
+        // SAVE PROGRESS: Update dough's progress too
+        if (station.contents) {
+            station.contents.rollProgress = station.rollProgress;
+        }
 
         if (station.rollProgress >= 98) {
             station.contents.rolled = true;
             station.rollProgress = 100;
+            if (station.contents) {
+                station.contents.rollProgress = 100;
+            }
             io.to(room.id).emit('notification', { msg: 'Dough Rolled!', type: 'success' });
         }
 
@@ -993,7 +1021,13 @@ io.on('connection', (socket) => {
         // Auto-place rice if holding it
         if (!station.contents && player.holding && player.holding.name === 'rice' && !player.holding.washed) {
             station.contents = player.holding;
-            station.washProgress = 0;
+            // PRESERVE PROGRESS: Only reset if rice doesn't have existing progress
+            if (typeof player.holding.washProgress !== 'number') {
+                station.washProgress = 0;
+                player.holding.washProgress = 0;
+            } else {
+                station.washProgress = player.holding.washProgress;
+            }
             player.holding = null;
             emitPlayerUpdate(player, room);
         }
@@ -1004,10 +1038,18 @@ io.on('connection', (socket) => {
         const washTime = ingConfig.washTime || 2000;
 
         station.washProgress = (station.washProgress || 0) + (10000 / washTime);
+        
+        // SAVE PROGRESS: Update rice's progress too
+        if (station.contents) {
+            station.contents.washProgress = station.washProgress;
+        }
 
         if (station.washProgress >= 98) {
             station.contents.washed = true;
             station.washProgress = 100;
+            if (station.contents) {
+                station.contents.washProgress = 100;
+            }
             io.to(room.id).emit('notification', { msg: '✅ Rice washed! Now cook it!', type: 'success' });
         }
 
@@ -1475,7 +1517,7 @@ function handleCounter(player, station, room) {
             station.contents = combined;
             player.holding = null;
         } else {
-            // Provide helpful error message
+            // Provide helpful error messages when combining fails
             if (player.holding.type === 'ingredient' && station.contents.type === 'plate') {
                 const ing = room.activeIngredients[player.holding.name];
                 if (player.holding.name === 'dough' && !player.holding.rolled) {
@@ -1485,8 +1527,21 @@ function handleCounter(player, station, room) {
                 } else if (ing && ing.chopTime > 0 && !player.holding.chopped) {
                     io.to(room.id).emit('notification', { msg: `✂️ Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                 } else if ((player.holding.name === 'meat' || player.holding.name === 'fish') && !player.holding.cooked) {
-                    io.to(room.id).emit('notification', { msg: `🔥 Cook the ${ing.emoji} ${ing.name} first!`, type: 'error' });
+                    // Check if this is for a dish that requires pre-cooking
+                    const plateIngredients = station.contents.ingredients || [];
+                    const isBurger = plateIngredients.includes('bread') && player.holding.name === 'meat';
+                    const isFishTacos = plateIngredients.includes('bread') && player.holding.name === 'fish';
+                    
+                    if (isBurger || isFishTacos || plateIngredients.length === 0) {
+                        io.to(room.id).emit('notification', { msg: `🔥 Cook the ${ing.emoji} ${ing.name} first!`, type: 'error' });
+                    } else {
+                        io.to(room.id).emit('notification', { msg: 'Cannot add to plate!', type: 'error' });
+                    }
+                } else {
+                    io.to(room.id).emit('notification', { msg: 'Cannot add to plate!', type: 'error' });
                 }
+            } else {
+                io.to(room.id).emit('notification', { msg: 'Cannot combine these items!', type: 'error' });
             }
         }
     }
@@ -1500,8 +1555,20 @@ function handleChopping(player, station, room) {
             const ing = room.activeIngredients[player.holding.name];
             if (ing && ing.chopTime > 0 && !player.holding.chopped) {
                 station.contents = player.holding;
-                station.chopProgress = 0;
+                // PRESERVE PROGRESS: Only reset if ingredient doesn't have existing progress
+                if (typeof player.holding.chopProgress !== 'number') {
+                    station.chopProgress = 0;
+                    player.holding.chopProgress = 0;
+                } else {
+                    station.chopProgress = player.holding.chopProgress;
+                }
                 player.holding = null;
+                
+                // Emit station update to show progress bar immediately
+                io.to(room.id).emit('stationUpdate', {
+                    stationId: station.id,
+                    station: sanitizeStation(station),
+                });
             } else if (ing && ing.chopTime === 0) {
                 io.to(room.id).emit('notification', { msg: `${ing.emoji} ${ing.name} doesn't need chopping!`, type: 'error' });
             } else if (player.holding.chopped) {
@@ -1534,6 +1601,7 @@ function handleChopping(player, station, room) {
                 station.contents = null;
                 station.chopProgress = 0;
             } else {
+                // VALIDATION: Cannot pick up until fully chopped
                 io.to(room.id).emit('notification', { msg: '✂️ Finish chopping first!', type: 'error' });
             }
         }
@@ -1687,8 +1755,20 @@ function handleRoller(player, station, room) {
         if (player.holding.type === 'ingredient' && player.holding.name === 'dough') {
             if (!player.holding.rolled) {
                 station.contents = player.holding;
-                station.rollProgress = 0;
+                // PRESERVE PROGRESS: Only reset if dough doesn't have existing progress
+                if (typeof player.holding.rollProgress !== 'number') {
+                    station.rollProgress = 0;
+                    player.holding.rollProgress = 0;
+                } else {
+                    station.rollProgress = player.holding.rollProgress;
+                }
                 player.holding = null;
+                
+                // Emit station update to show progress bar immediately
+                io.to(room.id).emit('stationUpdate', {
+                    stationId: station.id,
+                    station: sanitizeStation(station),
+                });
             } else {
                 io.to(room.id).emit('notification', { msg: '⚪ Dough already rolled!', type: 'info' });
             }
@@ -1702,6 +1782,7 @@ function handleRoller(player, station, room) {
             station.contents = null;
             station.rollProgress = 0;
         } else {
+            // VALIDATION: Cannot pick up until fully rolled
             io.to(room.id).emit('notification', { msg: '⚪ Finish rolling first!', type: 'error' });
         }
     }
@@ -1847,8 +1928,21 @@ function handleSink(player, station, room) {
             // Place rice in sink for washing
             if (!station.contents) {
                 station.contents = player.holding;
-                station.washProgress = 0;
+                // PRESERVE PROGRESS: Only reset if rice doesn't have existing progress
+                if (typeof player.holding.washProgress !== 'number') {
+                    station.washProgress = 0;
+                    player.holding.washProgress = 0;
+                } else {
+                    station.washProgress = player.holding.washProgress;
+                }
                 player.holding = null;
+                
+                // Emit station update to show progress bar immediately
+                io.to(room.id).emit('stationUpdate', {
+                    stationId: station.id,
+                    station: sanitizeStation(station),
+                });
+                
                 io.to(room.id).emit('notification', {
                     msg: '🚰 Washing rice... Hold Space!',
                     type: 'info',
@@ -1867,6 +1961,7 @@ function handleSink(player, station, room) {
             station.contents = null;
             station.washProgress = 0;
         } else {
+            // VALIDATION: Cannot pick up until fully washed
             io.to(room.id).emit('notification', { msg: '🚰 Finish washing first!', type: 'error' });
         }
     } else if (player.holding && player.holding.dirty) {

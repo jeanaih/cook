@@ -147,15 +147,39 @@ export class UIManager {
             const status = [];
             if (holding.chopped) status.push('<i class="bi bi-scissors"></i>');
             if (holding.cooked) status.push('<i class="bi bi-fire"></i>');
-            el.innerHTML = `${ing?.emoji || '?'} ${ing?.name || holding.name} ${status.join('')}`;
+            if (holding.rolled) status.push('<i class="bi bi-arrow-repeat"></i>');
+            if (holding.washed) status.push('<i class="bi bi-droplet-fill"></i>');
+            el.innerHTML = `${ing?.emoji || '?'} ${ing?.name || holding.name} ${status.join(' ')}`;
             el.style.color = ing?.color || '#fff';
         } else if (holding.type === 'plate') {
             if (holding.ingredients.length === 0) {
                 el.innerHTML = '<i class="bi bi-circle"></i> Empty Plate';
                 el.style.color = '#f0f0f0';
             } else {
-                const ings = holding.ingredients.map(i => config.INGREDIENTS[i]?.emoji || i).join('');
-                el.innerHTML = `<i class="bi bi-circle-fill"></i> ${ings}`;
+                // Show ingredients with their status
+                const ingredientDetails = holding.ingredients.map(ingName => {
+                    const ing = config.INGREDIENTS[ingName];
+                    const emoji = ing?.emoji || '?';
+                    const status = [];
+                    
+                    // Check if this specific ingredient is chopped/cooked/rolled/washed
+                    if (holding.chopped && holding.chopped.includes(ingName)) {
+                        status.push('<i class="bi bi-scissors" style="font-size: 10px;"></i>');
+                    }
+                    if (holding.cooked && holding.cooked.includes(ingName)) {
+                        status.push('<i class="bi bi-fire" style="font-size: 10px;"></i>');
+                    }
+                    if (holding.rolled && holding.rolled.includes(ingName)) {
+                        status.push('<i class="bi bi-arrow-repeat" style="font-size: 10px;"></i>');
+                    }
+                    if (holding.washed && holding.washed.includes(ingName)) {
+                        status.push('<i class="bi bi-droplet-fill" style="font-size: 10px;"></i>');
+                    }
+                    
+                    return `<span style="display: inline-flex; align-items: center; gap: 2px;">${emoji}${status.join('')}</span>`;
+                }).join(' ');
+                
+                el.innerHTML = `<i class="bi bi-circle-fill"></i> ${ingredientDetails}`;
                 el.style.color = '#f0f0f0';
             }
         }

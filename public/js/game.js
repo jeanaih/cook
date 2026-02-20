@@ -1960,36 +1960,571 @@ function updatePlayerHeldItem(playerId, holding) {
     heldGroup = new THREE.Group();
     heldGroup.name = 'heldGroup';
 
-    // Position comfortably in front of the player (Z+ direction based on movement logic)
+    // Position comfortably in front of the player
     heldGroup.position.set(0, 0.8, 0.5);
 
-    // --- USE KITCHEN RENDERER'S createContentMesh FOR CONSISTENT VISUALS ---
-    if (kitchen && typeof kitchen.createContentMesh === 'function') {
-        try {
-            const contentMesh = kitchen.createContentMesh(holding);
-            // Scale down to hand-held size (station items are full-size)
-            const heldScale = 0.6;
-            contentMesh.scale.set(heldScale, heldScale, heldScale);
-            heldGroup.add(contentMesh);
-        } catch (error) {
-            console.error('Error creating content mesh:', error);
-        }
-    } else {
-        // Fallback: simple meshes if kitchen renderer isn't available
-        if (holding.type === 'ingredient' && gameConfig && gameConfig.INGREDIENTS) {
-            const ing = gameConfig.INGREDIENTS[holding.name];
-            let color = new THREE.Color(ing ? ing.color : 0xffffff);
-            if (holding.burnt) color.setHex(0x000000);
-            else if (holding.cooked) { color.multiplyScalar(0.6); }
-            const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
-            heldGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), mat));
-        } else if (holding.type === 'plate') {
-            const plateMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            heldGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.25, 0.05, 16), plateMat));
-        }
+    // Create hand-appropriate held item visuals
+    if (holding.type === 'ingredient') {
+        createHeldIngredient(heldGroup, holding);
+    } else if (holding.type === 'plate') {
+        createHeldPlate(heldGroup, holding);
     }
 
     pm.group.add(heldGroup);
+}
+
+// Create realistic held ingredient visuals
+function createHeldIngredient(group, content) {
+    const ing = gameConfig.INGREDIENTS[content.name];
+    let color = new THREE.Color(ing ? ing.color : 0xffffff);
+    
+    if (content.burnt) {
+        color.setHex(0x000000);
+    } else if (content.cooked) {
+        color.multiplyScalar(0.6);
+        if (content.name === 'meat') color.setHex(0x8B4513);
+    } else if (content.chopped && content.name === 'fish') {
+        color.setHex(0xFFB6C1); // Pink salmon
+    }
+
+    const mat = new THREE.MeshStandardMaterial({
+        color: color.clone(),
+        roughness: content.burnt ? 1.0 : 0.7
+    });
+
+    // CHOPPED INGREDIENTS (simplified for hand-held)
+    if (content.chopped) {
+        if (content.name === 'meat') {
+            // Burger patty
+            const patty = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.15, 0.15, 0.04, 16),
+                mat
+            );
+            group.add(patty);
+        } else if (content.name === 'fish') {
+            // Sashimi slices
+            for (let i = 0; i < 3; i++) {
+                const slice = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.12, 0.02, 0.06),
+                    mat
+                );
+                slice.position.set(0, i * 0.025, (i - 1) * 0.02);
+                slice.rotation.y = Math.PI / 8;
+                group.add(slice);
+            }
+        } else if (content.name === 'lettuce') {
+            // Shredded lettuce
+            for (let i = 0; i < 4; i++) {
+                const shred = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.08, 0.06),
+                    new THREE.MeshStandardMaterial({ 
+                        color: color, 
+                        side: THREE.DoubleSide,
+                        roughness: 0.9
+                    })
+                );
+                shred.position.set(
+                    (Math.random() - 0.5) * 0.08,
+                    i * 0.02,
+                    (Math.random() - 0.5) * 0.08
+                );
+                shred.rotation.set(
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI
+                );
+                group.add(shred);
+            }
+        } else {
+            // Generic chopped pieces
+            for (let i = 0; i < 4; i++) {
+                const piece = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.04, 0.04, 0.04),
+                    mat
+                );
+                piece.position.set(
+                    (Math.random() - 0.5) * 0.1,
+                    i * 0.02,
+                    (Math.random() - 0.5) * 0.1
+                );
+                piece.rotation.set(
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI
+                );
+                group.add(piece);
+            }
+        }
+    }
+    // WHOLE INGREDIENTS (hand-sized versions)
+    else {
+        if (content.name === 'meat') {
+            // T-bone steak (compact)
+            const core = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 16, 12),
+                mat
+            );
+            core.scale.set(1.2, 0.5, 1);
+            group.add(core);
+            
+            // Bone
+            const boneMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const bone = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 0.03, 0.02),
+                boneMat
+            );
+            group.add(bone);
+            
+            // Fat rim
+            const fat = new THREE.Mesh(
+                new THREE.TorusGeometry(0.11, 0.02, 8, 16, Math.PI * 1.5),
+                boneMat
+            );
+            fat.rotation.x = Math.PI / 2;
+            fat.rotation.z = Math.PI / 4;
+            group.add(fat);
+        } else if (content.name === 'fish') {
+            // Whole fish (compact)
+            const body = new THREE.Mesh(
+                new THREE.SphereGeometry(0.15, 16, 12),
+                mat
+            );
+            body.scale.set(1.5, 0.6, 0.5);
+            group.add(body);
+            
+            // Tail
+            const tail = new THREE.Mesh(
+                new THREE.ConeGeometry(0.06, 0.12, 3),
+                mat
+            );
+            tail.position.set(0.18, 0, 0);
+            tail.rotation.z = -Math.PI / 2;
+            group.add(tail);
+            
+            // Eye
+            const eye = new THREE.Mesh(
+                new THREE.SphereGeometry(0.02, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x000000 })
+            );
+            eye.position.set(-0.15, 0.03, 0.04);
+            group.add(eye);
+        } else if (content.name === 'mushroom') {
+            // Mushroom
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.03, 0.04, 0.12, 12),
+                new THREE.MeshStandardMaterial({ color: 0xffffff })
+            );
+            stem.position.y = -0.02;
+            group.add(stem);
+            
+            const cap = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+                mat
+            );
+            cap.position.y = 0.04;
+            group.add(cap);
+        } else if (content.name === 'tomato' || content.name === 'onion') {
+            // Round vegetable
+            const bulb = new THREE.Mesh(
+                new THREE.SphereGeometry(0.11, 16, 16),
+                mat
+            );
+            bulb.scale.y = 0.9;
+            group.add(bulb);
+            
+            if (content.name === 'tomato') {
+                // Tomato segments
+                for (let seg = 0; seg < 6; seg++) {
+                    const segment = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.008, 0.2, 0.008),
+                        new THREE.MeshStandardMaterial({ 
+                            color: content.burnt ? 0x000000 : 0xC0392B,
+                            roughness: 0.8
+                        })
+                    );
+                    const angle = (seg / 6) * Math.PI * 2;
+                    segment.position.set(
+                        Math.cos(angle) * 0.105,
+                        0,
+                        Math.sin(angle) * 0.105
+                    );
+                    segment.rotation.y = angle;
+                    group.add(segment);
+                }
+                
+                // Green stem/calyx
+                const stemMat = new THREE.MeshStandardMaterial({ color: 0x27ae60 });
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.015, 0.02, 0.03, 6),
+                    stemMat
+                );
+                stem.position.y = 0.1;
+                group.add(stem);
+                
+                // Calyx leaves
+                for (let cl = 0; cl < 5; cl++) {
+                    const leaf = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.015, 0.04, 3),
+                        stemMat
+                    );
+                    const angle = (cl / 5) * Math.PI * 2;
+                    leaf.position.set(
+                        Math.cos(angle) * 0.03,
+                        0.11,
+                        Math.sin(angle) * 0.03
+                    );
+                    leaf.rotation.set(Math.PI / 3, angle, 0);
+                    group.add(leaf);
+                }
+            } else {
+                // Onion layers
+                for (let layer = 0; layer < 3; layer++) {
+                    const ring = new THREE.Mesh(
+                        new THREE.TorusGeometry(0.09 - layer * 0.015, 0.003, 8, 16),
+                        new THREE.MeshStandardMaterial({ 
+                            color: content.burnt ? 0x000000 : 0xE8D5B7,
+                            transparent: true,
+                            opacity: 0.6
+                        })
+                    );
+                    ring.rotation.x = Math.PI / 2;
+                    ring.position.y = 0.02 + layer * 0.03;
+                    group.add(ring);
+                }
+                
+                // Green sprout
+                const sprout = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.006, 0.008, 0.07, 6),
+                    new THREE.MeshStandardMaterial({ color: 0x7CB342 })
+                );
+                sprout.position.y = 0.13;
+                group.add(sprout);
+            }
+        } else if (content.name === 'lettuce') {
+            // Lettuce head with leaves
+            const lettuceCore = new THREE.Mesh(
+                new THREE.SphereGeometry(0.05, 12, 12),
+                new THREE.MeshStandardMaterial({ 
+                    color: content.burnt ? 0x000000 : 0xC8E6C9
+                })
+            );
+            lettuceCore.scale.y = 0.6;
+            group.add(lettuceCore);
+            
+            // Lettuce leaves
+            for (let i = 0; i < 5; i++) {
+                const leaf = new THREE.Mesh(
+                    new THREE.PlaneGeometry(0.12, 0.1),
+                    new THREE.MeshStandardMaterial({ 
+                        color: color, 
+                        side: THREE.DoubleSide,
+                        roughness: 0.9
+                    })
+                );
+                const angle = (i / 5) * Math.PI * 2;
+                leaf.position.set(
+                    Math.cos(angle) * 0.06,
+                    0.02,
+                    Math.sin(angle) * 0.06
+                );
+                leaf.rotation.set(
+                    -Math.PI / 3,
+                    angle,
+                    0
+                );
+                group.add(leaf);
+            }
+        } else if (content.name === 'bread') {
+            // Bread bun
+            const bunTop = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+                mat
+            );
+            bunTop.position.y = 0.02;
+            group.add(bunTop);
+            
+            const bunBottom = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.12, 0.11, 0.04, 16),
+                mat
+            );
+            bunBottom.position.y = -0.02;
+            group.add(bunBottom);
+            
+            // Sesame seeds
+            const seedMat = new THREE.MeshStandardMaterial({ color: 0xFFFACD });
+            for (let s = 0; s < 6; s++) {
+                const seed = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.008, 6, 4),
+                    seedMat
+                );
+                const angle = (s / 6) * Math.PI * 2;
+                seed.position.set(
+                    Math.cos(angle) * 0.05,
+                    0.08,
+                    Math.sin(angle) * 0.05
+                );
+                group.add(seed);
+            }
+        } else if (content.name === 'dough') {
+            // Dough ball with flour
+            const doughBall = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 16, 12),
+                mat
+            );
+            doughBall.scale.set(1, 0.7, 1);
+            group.add(doughBall);
+            
+            // Flour dusting
+            const flourMat = new THREE.MeshStandardMaterial({ 
+                color: 0xFFFFF0,
+                transparent: true,
+                opacity: 0.5
+            });
+            for (let f = 0; f < 8; f++) {
+                const dust = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.008, 6, 4),
+                    flourMat
+                );
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 0.08 + Math.random() * 0.02;
+                dust.position.set(
+                    Math.cos(angle) * radius,
+                    (Math.random() - 0.5) * 0.12,
+                    Math.sin(angle) * radius
+                );
+                group.add(dust);
+            }
+        } else if (content.name === 'cheese') {
+            // Cheese wedge
+            const cheese = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.14, 0.14, 0.1, 3),
+                mat
+            );
+            cheese.rotation.x = Math.PI / 2;
+            group.add(cheese);
+            
+            // Cheese holes
+            for (let h = 0; h < 3; h++) {
+                const hole = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.015 + Math.random() * 0.01, 8, 8),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0xFFE082,
+                        roughness: 0.6
+                    })
+                );
+                hole.position.set(
+                    (Math.random() - 0.5) * 0.1,
+                    (Math.random() - 0.5) * 0.08,
+                    (Math.random() - 0.5) * 0.1
+                );
+                group.add(hole);
+            }
+        } else if (content.name === 'rice') {
+            // Rice bowl
+            const rice = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 16, 12),
+                mat
+            );
+            rice.scale.set(1, 0.6, 1);
+            group.add(rice);
+            
+            // Rice grains on top
+            for (let i = 0; i < 12; i++) {
+                const grain = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.003, 0.003, 0.01, 4),
+                    new THREE.MeshStandardMaterial({ color: 0xFFFFF0 })
+                );
+                grain.position.set(
+                    (Math.random() - 0.5) * 0.12,
+                    0.06 + Math.random() * 0.02,
+                    (Math.random() - 0.5) * 0.12
+                );
+                grain.rotation.set(
+                    (Math.random() - 0.5) * Math.PI,
+                    Math.random() * Math.PI,
+                    (Math.random() - 0.5) * Math.PI
+                );
+                group.add(grain);
+            }
+        } else if (content.name === 'egg') {
+            // Egg
+            const egg = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 16, 12),
+                mat
+            );
+            egg.scale.set(0.8, 1, 0.8);
+            group.add(egg);
+            
+            // Egg texture (subtle speckles)
+            for (let sp = 0; sp < 5; sp++) {
+                const speckle = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.005, 6, 6),
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0xD4A574,
+                        transparent: true,
+                        opacity: 0.4
+                    })
+                );
+                const angle = Math.random() * Math.PI * 2;
+                const height = (Math.random() - 0.5) * 0.12;
+                speckle.position.set(
+                    Math.cos(angle) * 0.07,
+                    height,
+                    Math.sin(angle) * 0.07
+                );
+                group.add(speckle);
+            }
+        } else {
+            // Generic sphere
+            const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(0.1, 12, 12),
+                mat
+            );
+            group.add(sphere);
+        }
+    }
+
+    // Add steam if cooked
+    if (content.cooked && !content.burnt) {
+        addHeldSteam(group);
+    }
+}
+
+// Create held plate visual
+function createHeldPlate(group, content) {
+    // Simple elegant plate
+    const plateMat = new THREE.MeshStandardMaterial({ 
+        color: 0xffffff, 
+        roughness: 0.1,
+        metalness: 0.1
+    });
+    const plate = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.15, 0.03, 24),
+        plateMat
+    );
+    group.add(plate);
+    
+    // Plate rim
+    const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(0.18, 0.008, 8, 24),
+        new THREE.MeshStandardMaterial({ color: 0xdddddd })
+    );
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.025;
+    group.add(rim);
+
+    // If plate has ingredients, show simplified but recognizable version
+    const ings = content.ingredients || [];
+    if (ings.length > 0) {
+        // Check if it's a pizza (has dough)
+        const isPizza = ings.includes('dough');
+        const isBurger = ings.includes('bread') && ings.includes('meat');
+        
+        if (isPizza) {
+            // Pizza: show dough base with toppings
+            const doughColor = content.burnt ? 0x000000 : 0xF5DEB3;
+            const base = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.15, 0.15, 0.02, 24),
+                new THREE.MeshStandardMaterial({ color: doughColor })
+            );
+            base.position.y = 0.04;
+            group.add(base);
+            
+            // Tomato sauce
+            if (ings.includes('tomato')) {
+                const sauce = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.13, 0.13, 0.01, 24),
+                    new THREE.MeshStandardMaterial({ color: 0xc0392b })
+                );
+                sauce.position.y = 0.055;
+                group.add(sauce);
+            }
+            
+            // Shredded cheese
+            if (ings.includes('cheese')) {
+                for (let s = 0; s < 12; s++) {
+                    const shred = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.008, 0.004, 0.02),
+                        new THREE.MeshStandardMaterial({ color: 0xf1c40f })
+                    );
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = Math.random() * 0.11;
+                    shred.position.set(
+                        Math.cos(angle) * radius,
+                        0.065,
+                        Math.sin(angle) * radius
+                    );
+                    shred.rotation.y = Math.random() * Math.PI;
+                    group.add(shred);
+                }
+            }
+        } else if (isBurger) {
+            // Burger: show stacked layers
+            let layerY = 0.04;
+            ings.forEach((ingName) => {
+                const ingConfig = gameConfig.INGREDIENTS[ingName];
+                let color = new THREE.Color(ingConfig ? ingConfig.color : 0x777777);
+                if (content.burnt) color.setHex(0x000000);
+                
+                const layer = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16),
+                    new THREE.MeshStandardMaterial({ color })
+                );
+                layer.position.y = layerY;
+                group.add(layer);
+                layerY += 0.025;
+            });
+        } else {
+            // Other dishes: show ingredients in a circle
+            ings.forEach((ingName, i) => {
+                const ingConfig = gameConfig.INGREDIENTS[ingName];
+                let color = new THREE.Color(ingConfig ? ingConfig.color : 0x777777);
+                if (content.burnt) color.setHex(0x000000);
+                
+                const piece = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.03, 8, 8),
+                    new THREE.MeshStandardMaterial({ color })
+                );
+                const angle = (i / Math.max(ings.length, 1)) * Math.PI * 2;
+                const radius = 0.08;
+                piece.position.set(
+                    Math.cos(angle) * radius,
+                    0.04,
+                    Math.sin(angle) * radius
+                );
+                group.add(piece);
+            });
+        }
+        
+        // Add steam if cooked
+        if (content.cooked && content.cooked.length > 0 && !content.burnt) {
+            addHeldSteam(group);
+        }
+    }
+}
+
+// Add simple steam effect for held items
+function addHeldSteam(group) {
+    // Create a few steam particles
+    const steamMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.3 
+    });
+    
+    for (let i = 0; i < 3; i++) {
+        const steam = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 6, 6),
+            steamMat
+        );
+        steam.position.set(
+            (Math.random() - 0.5) * 0.08,
+            0.12 + i * 0.04,
+            (Math.random() - 0.5) * 0.08
+        );
+        steam.scale.set(1, 1.5, 1);
+        group.add(steam);
+    }
 }
 
 
