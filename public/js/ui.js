@@ -215,12 +215,16 @@ export class UIManager {
                 <div class="stat-label">Dishes Served</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">${data.ordersFailed}</div>
-                <div class="stat-label">Orders Failed</div>
+                <div class="stat-value">${data.perfectDishes || 0}</div>
+                <div class="stat-label">Perfect Dishes</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">x${data.maxCombo}</div>
                 <div class="stat-label">Max Combo</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${data.chefPoints || 0}</div>
+                <div class="stat-label">Chef Hat Points</div>
             </div>
         `;
 
@@ -228,7 +232,7 @@ export class UIManager {
         const playersEl = document.getElementById('gameover-players');
         playersEl.innerHTML = data.players.map(p => `
             <div class="player-tag" style="border-color:${p.color};background:${p.color}22;margin:4px">
-                <i class="bi bi-person-fill"></i> ${p.name}: ${p.score} pts (${p.dishesServed} dishes)
+                <i class="bi bi-person-fill"></i> ${p.name}: ${p.score} pts (${p.dishesServed} dishes, ${p.perfectDishes || 0} perfect, ${p.chefPoints || 0} hat)
             </div>
         `).join('');
 

@@ -523,6 +523,7 @@ function createRoom(roomId, settings) {
         score: 0,
         combo: 0,
         maxCombo: 0,
+        perfectDishes: 0,
         timeLeft: GAME_DURATION,
         state: 'lobby',
         mode: mode,
@@ -618,30 +619,66 @@ function checkPlateMatchesOrder(plateContents, room) {
     const plateIngs = [...plateContents.ingredients].sort();
 
     for (const order of room.orders) {
-        const recipe = room.activeRecipes[order.recipe];
+        const recipeKey = order.recipe;
+        const recipe = room.activeRecipes[recipeKey];
         const recipeIngs = [...recipe.ingredients].sort();
 
         if (plateIngs.length === recipeIngs.length &&
             plateIngs.every((ing, i) => ing === recipeIngs[i])) {
-            // Check all required chopping done
-            const allChopped = recipe.requiresChopping.every(ing =>
-                plateContents.chopped && plateContents.chopped.includes(ing)
-            );
-            // Check all required cooking done
-            const allCooked = recipe.requiresCooking.every(ing =>
-                plateContents.cooked && plateContents.cooked.includes(ing)
-            );
-            // Check all required rolling done
-            const allRolled = (recipe.requiresRolling || []).every(ing =>
-                plateContents.rolled && plateContents.rolled.includes(ing)
-            );
-            // Check all required washing done
-            const allWashed = (recipe.requiresWashing || []).every(ing =>
-                plateContents.washed && plateContents.washed.includes(ing)
-            );
-            if (allChopped && allCooked && allRolled && allWashed) {
-                return order;
+            let penalty = 0;
+
+            const requiresChopping = recipe.requiresChopping || [];
+            if (requiresChopping.length > 0) {
+                const missingChop = requiresChopping.some(ing =>
+                    !plateContents.chopped || !plateContents.chopped.includes(ing)
+                );
+                if (missingChop) penalty += 10;
             }
+
+            const requiresCooking = recipe.requiresCooking || [];
+            if (requiresCooking.length > 0) {
+                const missingCook = requiresCooking.some(ing =>
+                    !plateContents.cooked || !plateContents.cooked.includes(ing)
+                );
+                if (missingCook) penalty += 10;
+            }
+
+            const requiresRolling = recipe.requiresRolling || [];
+            if (requiresRolling.length > 0) {
+                const missingRoll = requiresRolling.some(ing =>
+                    !plateContents.rolled || !plateContents.rolled.includes(ing)
+                );
+                if (missingRoll) penalty += 10;
+            }
+
+            const requiresWashing = recipe.requiresWashing || [];
+            if (requiresWashing.length > 0) {
+                const missingWash = requiresWashing.some(ing =>
+                    !plateContents.washed || !plateContents.washed.includes(ing)
+                );
+                if (missingWash) penalty += 10;
+            }
+
+            const typeBDishes = ['soup', 'omelette', 'steak_mushroom', 'pizza'];
+            if (typeBDishes.includes(recipeKey) && !plateContents.cookedPlate) {
+                penalty += 10;
+            }
+
+            if (recipeKey === 'sushi' && plateContents.cooked && plateContents.cooked.includes('fish')) {
+                penalty += 10;
+            }
+
+            const basePoints = order.points;
+            const effectiveBasePoints = Math.max(basePoints - penalty, 0);
+
+            return {
+                order,
+                recipeKey,
+                recipe,
+                basePoints,
+                processPenalty: penalty,
+                effectiveBasePoints,
+            };
         }
     }
     return null;
@@ -1611,12 +1648,10 @@ function handleChopping(player, station, room) {
 
 function handleStove(player, station, room) {
     if (player.holding && !station.contents) {
-        // Validate: Only cookable items go on stove
         if (player.holding.type === 'ingredient') {
             const name = player.holding.name;
             const ing = room.activeIngredients[name];
             
-            // Block items that don't need cooking
             if (name === 'bread') {
                 io.to(room.id).emit('notification', { msg: '🍞 Bread doesn\'t need cooking!', type: 'error' });
                 emitPlayerUpdate(player, room);
@@ -1637,29 +1672,36 @@ function handleStove(player, station, room) {
                 emitPlayerUpdate(player, room);
                 return;
             }
+            if (name === 'egg') {
+                io.to(room.id).emit('notification', { msg: '🥚 Add egg to a plate with other ingredients, then cook!', type: 'error' });
+                emitPlayerUpdate(player, room);
+                return;
+            }
             
-            // Rice must be washed first
             if (name === 'rice' && !player.holding.washed) {
                 io.to(room.id).emit('notification', { msg: '🍚 Wash the rice at the Sink first!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
             
-            // CRITICAL: Items that need chopping MUST be chopped before cooking
             if (ing && ing.chopTime > 0 && !player.holding.chopped) {
                 io.to(room.id).emit('notification', { msg: `✂️ Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
             
-            // All validations passed - allow cooking
             station.contents = player.holding;
             station.cookProgress = 0;
             station.isBurning = false;
             station.cookedNotified = false;
             player.holding = null;
         } else if (player.holding.type === 'plate') {
-            // Allow plates on stove for dishes that cook together (soup, omelette, steak)
+            const plateIngredients = player.holding.ingredients || [];
+            if (plateIngredients.includes('dough')) {
+                io.to(room.id).emit('notification', { msg: '🍕 Cook pizza in the Oven, not on the Stove!', type: 'error' });
+                emitPlayerUpdate(player, room);
+                return;
+            }
             station.contents = player.holding;
             station.cookProgress = 0;
             station.isBurning = false;
@@ -1689,21 +1731,16 @@ function handleStove(player, station, room) {
 
 function handleOven(player, station, room) {
     if (player.holding && !station.contents) {
-        // VALIDATION: Only allow dough-based items in oven
         if (player.holding.type === 'ingredient' && player.holding.name === 'dough') {
-            // Single dough - must be rolled first
             if (!player.holding.rolled) {
                 io.to(room.id).emit('notification', { msg: '⚪ Roll the dough at the Roller first!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
-            station.contents = player.holding;
-            station.cookProgress = 0;
-            station.isBurning = false;
-            station.cookedNotified = false;
-            player.holding = null;
+            io.to(room.id).emit('notification', { msg: '🍕 Put rolled dough on a plate with toppings before baking!', type: 'error' });
+            emitPlayerUpdate(player, room);
+            return;
         } else if (player.holding.type === 'plate' && player.holding.ingredients.includes('dough')) {
-            // Pizza on plate - validate it's properly assembled
             const doughRolled = player.holding.rolled && player.holding.rolled.includes('dough');
             if (!doughRolled) {
                 io.to(room.id).emit('notification', { msg: '⚪ Roll the dough at the Roller first!', type: 'error' });
@@ -1711,11 +1748,12 @@ function handleOven(player, station, room) {
                 return;
             }
             
-            // Check if all ingredients are properly processed
             const tomatoChopped = !player.holding.ingredients.includes('tomato') || 
                                  (player.holding.chopped && player.holding.chopped.includes('tomato'));
             const cheeseChopped = !player.holding.ingredients.includes('cheese') || 
                                  (player.holding.chopped && player.holding.chopped.includes('cheese'));
+            const hasTomato = player.holding.ingredients.includes('tomato');
+            const hasCheese = player.holding.ingredients.includes('cheese');
             
             if (!tomatoChopped) {
                 io.to(room.id).emit('notification', { msg: '🍅 Chop the tomato first!', type: 'error' });
@@ -1724,6 +1762,11 @@ function handleOven(player, station, room) {
             }
             if (!cheeseChopped) {
                 io.to(room.id).emit('notification', { msg: '🧀 Chop the cheese first!', type: 'error' });
+                emitPlayerUpdate(player, room);
+                return;
+            }
+            if (!hasTomato || !hasCheese) {
+                io.to(room.id).emit('notification', { msg: '🍕 Add tomato and cheese before baking the pizza!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
@@ -1792,9 +1835,13 @@ function handleRoller(player, station, room) {
 function handleServe(player, station, room) {
     if (player.holding && player.holding.type === 'plate') {
         const plate = player.holding;
-        const matchedOrder = checkPlateMatchesOrder(plate, room);
+        const evaluation = checkPlateMatchesOrder(plate, room);
 
-        if (matchedOrder) {
+        if (evaluation) {
+            const matchedOrder = evaluation.order;
+            const recipeKey = evaluation.recipeKey;
+            const processPenalty = evaluation.processPenalty;
+
             room.combo++;
             if (room.combo > room.maxCombo) room.maxCombo = room.combo;
 
@@ -1813,7 +1860,7 @@ function handleServe(player, station, room) {
             // --- NEW: SEASONING BONUS ---
             const seasoningBonus = plate.seasoning ? 8 : 0;
 
-            const basePoints = matchedOrder.points;
+            const basePoints = evaluation.effectiveBasePoints;
             const totalPoints = basePoints + (comboMultiplier - 1) * 5 + timeBonus + freshnessBonus + seasoningBonus;
 
             // Score handling: Co-op = shared score, VS = individual scores
@@ -1842,6 +1889,10 @@ function handleServe(player, station, room) {
 
             room.ordersCompleted++;
             player.dishesServed++;
+            if (processPenalty === 0) {
+                room.perfectDishes = (room.perfectDishes || 0) + 1;
+                player.perfectDishes = (player.perfectDishes || 0) + 1;
+            }
 
             room.orders = room.orders.filter(o => o.id !== matchedOrder.id);
             player.holding = null;
@@ -1856,7 +1907,8 @@ function handleServe(player, station, room) {
                 playerScore: player.score,
             });
 
-            let msg = `${room.activeRecipes[matchedOrder.recipe].emoji} ${room.activeRecipes[matchedOrder.recipe].name} served! +${totalPoints} pts`;
+            let msg = `${room.activeRecipes[recipeKey].emoji} ${room.activeRecipes[recipeKey].name} served! +${totalPoints} pts`;
+            if (processPenalty > 0) msg += ` (-${processPenalty} process)`;
             if (freshnessBonus > 0) msg += ` (✨ Freshness +${freshnessBonus})`;
             if (seasoningBonus > 0) msg += ` (🧂 Seasoned +${seasoningBonus})`;
 
@@ -1909,13 +1961,13 @@ function handleTrash(player, station, room) {
 
 function handlePlates(player, station, room) {
     if (!player.holding) {
-        // Pick up a clean plate
         player.holding = {
             type: 'plate',
             ingredients: [],
             chopped: [],
             cooked: [],
             rolled: [],
+            cookedPlate: false,
         };
     }
     emitPlayerUpdate(player, room);
@@ -1982,57 +2034,39 @@ function handleSink(player, station, room) {
 
 // ============ ITEM COMBINING ============
 function tryCombine(itemA, itemB, room) {
-    // Combine ingredient onto plate
     if (itemA.type === 'ingredient' && itemB.type === 'plate') {
         const ingName = itemA.name;
         const ing = room ? room.activeIngredients[ingName] : INGREDIENTS[ingName];
         
-        // VALIDATION: Dough MUST be rolled before plating
         if (ingName === 'dough' && !itemA.rolled) {
             return null;
         }
         
-        // VALIDATION: Rice MUST be washed before plating
         if (ingName === 'rice' && !itemA.washed) {
             return null;
         }
         
-        // VALIDATION: Items that need chopping MUST be chopped before plating
         if (ing && ing.chopTime > 0 && !itemA.chopped) {
             return null;
         }
         
-        // VALIDATION: For specific dishes, check if ingredient needs cooking before plating
-        // Burger: meat must be cooked
-        // Fish Tacos: fish must be cooked
-        // But for dishes that cook together (soup, omelette, steak), ingredients go on plate THEN cook
-        
-        // Check if we're making a dish that cooks ingredients individually
         if (room && (ingName === 'meat' || ingName === 'fish')) {
-            // Look at what's already on the plate to determine the dish type
             const plateIngredients = itemB.ingredients || [];
             
-            // Burger has: bread, meat, lettuce, tomato
-            // Fish Tacos has: fish, lettuce, tomato, bread
             const isBurger = plateIngredients.includes('bread') && ingName === 'meat';
             const isFishTacos = plateIngredients.includes('bread') && ingName === 'fish';
             
-            // For burger and fish tacos, meat/fish must be cooked before plating
             if ((isBurger || isFishTacos) && !itemA.cooked) {
                 return null;
             }
             
-            // If plate is empty or has other ingredients, check recipe requirements
             if (plateIngredients.length === 0) {
-                // Empty plate - check all active recipes to see if this ingredient needs pre-cooking
                 let needsPreCooking = false;
                 
                 if (room.activeRecipes) {
-                    // Check burger recipe
                     if (room.activeRecipes.burger && ingName === 'meat') {
                         needsPreCooking = true;
                     }
-                    // Check fish tacos recipe
                     if (room.activeRecipes.fish_tacos && ingName === 'fish') {
                         needsPreCooking = true;
                     }
@@ -2044,7 +2078,6 @@ function tryCombine(itemA, itemB, room) {
             }
         }
 
-        // All validations passed - combine
         if (!itemB.ingredients.includes(itemA.name)) {
             const plate = { ...itemB };
             plate.ingredients = [...itemB.ingredients, itemA.name];
@@ -2053,8 +2086,8 @@ function tryCombine(itemA, itemB, room) {
             if (itemA.rolled) plate.rolled = [...(itemB.rolled || []), itemA.name];
             if (itemA.washed) plate.washed = [...(itemB.washed || []), itemA.name];
             if (itemA.burnt) plate.burnt = true;
+            plate.cookedPlate = false;
 
-            // --- TRACK FRESHNESS ---
             if (!plate.platedAt) plate.platedAt = Date.now();
 
             return plate;
@@ -2100,6 +2133,7 @@ function finalizeGameStart(room) {
     room.orders = [];
     room.ordersCompleted = 0;
     room.ordersFailed = 0;
+    room.perfectDishes = 0;
 
     Object.values(room.stations).forEach(s => {
         s.contents = null;
@@ -2113,6 +2147,7 @@ function finalizeGameStart(room) {
         p.holding = null;
         p.score = 0;
         p.dishesServed = 0;
+        p.perfectDishes = 0;
         p.isChopping = false;
     });
 
@@ -2196,7 +2231,6 @@ function tickGame(room) {
             station.cookProgress += (TICK_RATE / cookTime) * 100;
 
             if (station.cookProgress >= 100 && !station.cookedNotified) {
-                // Mark as cooked
                 if (contents.type === 'ingredient') {
                     contents.cooked = true;
                 } else if (contents.type === 'plate') {
@@ -2204,6 +2238,7 @@ function tickGame(room) {
                         if (!contents.cooked) contents.cooked = [];
                         if (!contents.cooked.includes(ing)) contents.cooked.push(ing);
                     });
+                    contents.cookedPlate = true;
                 }
                 station.cookedNotified = true;
                 io.to(room.id).emit('cookComplete', { stationId: station.id });
@@ -2263,16 +2298,21 @@ function endGame(room) {
         room.highScore = room.score;
     }
 
+    const chefPoints = Math.floor(room.score / 10);
+
     io.to(room.id).emit('gameOver', {
         score: room.score,
         highScore: room.highScore,
         ordersCompleted: room.ordersCompleted,
-        ordersFailed: room.ordersFailed,
+        perfectDishes: room.perfectDishes || 0,
         maxCombo: room.maxCombo,
+        chefPoints,
         players: Object.values(room.players).map(p => ({
             name: p.name,
             score: p.score,
             dishesServed: p.dishesServed,
+            perfectDishes: p.perfectDishes || 0,
+            chefPoints: Math.floor((p.score || 0) / 10),
             color: p.color,
         })),
     });
