@@ -10,6 +10,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcrypt');
+const admin = require('firebase-admin');
 
 const app = express();
 app.use(express.json()); // Enable JSON body parsing for API
@@ -82,11 +84,151 @@ app.delete('/api/delete-map/:name', (req, res) => {
     }
 });
 
+// ============ FIREBASE SETUP ============
+let db = null;
+const FIREBASE_KEY_PATH = path.join(__dirname, 'serviceAccountKey.json');
+
+if (fs.existsSync(FIREBASE_KEY_PATH)) {
+    try {
+        const serviceAccount = require(FIREBASE_KEY_PATH);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        db = admin.firestore();
+        console.log('🔥 Firebase Cloud Firestore Connected!');
+    } catch (e) {
+        console.error('❌ Firebase Init Error:', e.message || e);
+    }
+} else {
+    console.log('ℹ️ No serviceAccountKey.json found. Using local users.json.');
+}
+
+// ============ ACHIEVEMENT SYSTEM ============
+function checkAchievements(user, player, room) {
+    const stats = user.stats;
+    let newAchievements = [];
+
+    // First Dish Served - check if this was the first ever dish
+    if (stats.dishesServed === 0 && player.dishesServed > 0) {
+        newAchievements.push({ id: 'first_dish', name: 'First Dish!', description: 'Serve your first dish', unlockedAt: Date.now() });
+    }
+
+    // Score Achievements
+    if (player.score >= 100 && !stats.achievements.some(a => a.id === 'score_100')) {
+        newAchievements.push({ id: 'score_100', name: 'Century Chef', description: 'Score 100 points in a game', unlockedAt: Date.now() });
+    }
+    if (player.score >= 200 && !stats.achievements.some(a => a.id === 'score_200')) {
+        newAchievements.push({ id: 'score_200', name: 'Double Century', description: 'Score 200 points in a game', unlockedAt: Date.now() });
+    }
+
+    // Dishes Served Achievements
+    if (player.dishesServed >= 5 && !stats.achievements.some(a => a.id === 'dishes_5')) {
+        newAchievements.push({ id: 'dishes_5', name: 'Busy Chef', description: 'Serve 5 dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.dishesServed >= 10 && !stats.achievements.some(a => a.id === 'dishes_10')) {
+        newAchievements.push({ id: 'dishes_10', name: 'Master Chef', description: 'Serve 10 dishes in a game', unlockedAt: Date.now() });
+    }
+
+    // Perfect Dishes
+    if (player.perfectDishes >= 3 && !stats.achievements.some(a => a.id === 'perfect_3')) {
+        newAchievements.push({ id: 'perfect_3', name: 'Perfectionist', description: 'Serve 3 perfect dishes in a game', unlockedAt: Date.now() });
+    }
+
+    // Combo
+    if (room.maxCombo >= 5 && !stats.achievements.some(a => a.id === 'combo_5')) {
+        newAchievements.push({ id: 'combo_5', name: 'Combo Master', description: 'Achieve a 5x combo', unlockedAt: Date.now() });
+    }
+
+    // Games Played - check after incrementing
+    if (stats.gamesPlayed >= 10 && !stats.achievements.some(a => a.id === 'games_10')) {
+        newAchievements.push({ id: 'games_10', name: 'Veteran Chef', description: 'Play 10 games', unlockedAt: Date.now() });
+    }
+
+    return newAchievements;
+}
+
+// ============ USER MANAGEMENT ============
+const USERS_FILE = path.join(__dirname, 'users.json');
+let users = {};
+
+async function loadUsers() {
+    // 1. Load from local file first (for fallback/speed)
+    if (fs.existsSync(USERS_FILE)) {
+        try {
+            const data = fs.readFileSync(USERS_FILE, 'utf8');
+            users = JSON.parse(data);
+        } catch (e) {
+            console.error('Error loading local users:', e);
+            users = {};
+        }
+    }
+
+    // 2. If Firebase is active, sync and migrate
+    if (db) {
+        try {
+            const snapshot = await db.collection('users').get();
+            const cloudUserIds = new Set();
+            snapshot.forEach(doc => {
+                users[doc.id] = doc.data();
+                cloudUserIds.add(doc.id);
+            });
+            console.log(`🌐 Synced ${snapshot.size} users from Cloud Firestore.`);
+
+            // 3. Migration: Upload local users that are NOT in Cloud yet
+            let migrationCount = 0;
+            for (const [id, user] of Object.entries(users)) {
+                if (user.type === 'account' && !cloudUserIds.has(id)) {
+                    await saveUserToCloud(id, user);
+                    migrationCount++;
+                }
+            }
+            if (migrationCount > 0) {
+                console.log(`⬆️  Migrated ${migrationCount} local users to Firestore.`);
+            }
+        } catch (e) {
+            console.error('Error syncing/migrating from Firestore:', e);
+        }
+    }
+}
+
+async function saveUserToCloud(userId, userData) {
+    if (!db || userData.type === 'guest') return;
+    try {
+        await db.collection('users').doc(userId).set(userData);
+    } catch (e) {
+        console.error(`Error saving user ${userId} to Firestore:`, e);
+    }
+}
+
+function saveUsersLocally() {
+    try {
+        const accountsOnly = {};
+        Object.entries(users).forEach(([id, user]) => {
+            if (user.type === 'account') {
+                accountsOnly[id] = user;
+            }
+        });
+        fs.writeFileSync(USERS_FILE, JSON.stringify(accountsOnly, null, 2));
+    } catch (e) {
+        console.error('Error saving local users:', e);
+    }
+}
+
+// Global save helper
+async function persistUser(userId) {
+    saveUsersLocally();
+    if (users[userId] && users[userId].type === 'account') {
+        await saveUserToCloud(userId, users[userId]);
+    }
+}
+
+loadUsers();
+
 // ============ GAME CONFIGURATION ============
 const TILE_SIZE = 2;
 const GRID_W = 14;
 const GRID_H = 10;
-const GAME_DURATION = 300; // 5 minutes per round (Easier)
+const GAME_DURATION = 300;
 const ORDER_INTERVAL = 15000; // Slower orders (Easier)
 const ORDER_TIMEOUT = 60000; // Longer expiration (Easier)
 const MAX_ORDERS = 6;
@@ -102,7 +244,7 @@ const INGREDIENTS = {
     dough: { name: 'Dough', color: '#f5f6fa', emoji: '⚪', chopTime: 0, rollTime: 3000 },
     fish: { name: 'Fish', color: '#3498db', emoji: '🐟', chopTime: 2500 },
     rice: { name: 'Rice', color: '#ecf0f1', emoji: '🍚', chopTime: 0, requiresWashing: true, washTime: 2000 },
-    onion: { name: 'Onion', color: '#9b59b6', emoji: '🧅', chopTime: 2500 },
+    onion: { name: 'Onion', color: '#0cef8dc1', emoji: '🧅', chopTime: 2500 },
     mushroom: { name: 'Mushroom', color: '#8B7355', emoji: '🍄', chopTime: 2500 },
     egg: { name: 'Egg', color: '#FFEFD5', emoji: '🥚', chopTime: 0 },
 };
@@ -214,8 +356,8 @@ function getRequiredStations(ingredients, recipes, difficulty) {
 
     for (let i = 0; i < count; i++) stations.push({ type: 'chopping', id: `chop${i}` });
     for (let i = 0; i < count; i++) stations.push({ type: 'stove', id: `stove${i}` });
-    stations.push({ type: 'oven', id: 'oven1' });
-    stations.push({ type: 'roller', id: 'roller1' }); // Add Roller station // Always have one oven for pizza!
+    for (let i = 0; i < count; i++) stations.push({ type: 'oven', id: `oven${i + 1}` });
+    for (let i = 0; i < count; i++) stations.push({ type: 'roller', id: `roller${i + 1}` });
 
     stations.push({ type: 'sink', id: 'sink1' });
     stations.push({ type: 'plates', id: 'plates1' });
@@ -227,9 +369,9 @@ function getRequiredStations(ingredients, recipes, difficulty) {
     stations.push({ type: 'serve', id: 'serve1' });
     stations.push({ type: 'trash', id: 'trash1' });
 
-    // 3. Special Stations
-    stations.push({ type: 'seasoning', id: 'seasoning_salt', ingredient: 'salt' });
-    stations.push({ type: 'seasoning', id: 'seasoning_sauce', ingredient: 'sauce' });
+    // 3. Special Stations - Seasoning Counters
+    stations.push({ type: 'seasoning', id: 'seasoning_salt', ingredient: 'salt', canSpawn: true });
+    stations.push({ type: 'seasoning', id: 'seasoning_sauce', ingredient: 'sauce', canSpawn: true });
 
     return stations;
 }
@@ -240,8 +382,10 @@ function generateLayout(width, height, ingredientSet, activeRecipes, difficulty)
 
     // Filter stations into groups
     const crates = stations.filter(s => s.type === 'crate');
-    const cooking = stations.filter(s => s.type === 'stove' || s.type === 'chopping');
-    const utility = stations.filter(s => !['crate', 'stove', 'chopping', 'counter'].includes(s.type));
+    // TOOLS: stove, chopping, oven, roller, sink - these get randomized positions
+    const tools = stations.filter(s => ['stove', 'chopping', 'oven', 'roller', 'sink'].includes(s.type));
+    const seasoning = stations.filter(s => s.type === 'seasoning');
+    const utility = stations.filter(s => !['crate', 'stove', 'chopping', 'oven', 'roller', 'sink', 'counter', 'seasoning'].includes(s.type));
 
     // Define perimeter but skip corners
     let slots = [];
@@ -251,7 +395,45 @@ function generateLayout(width, height, ingredientSet, activeRecipes, difficulty)
     // Shuffle slots
     slots = slots.sort(() => Math.random() - 0.5);
 
-    // 1. Place Utility (Trash, Serve, Sink, Plate) in a "service zone"
+    // --- 1. ISLAND GENERATION (Center kitchen) ---
+    const midX = Math.floor(width / 2);
+    const midZ = Math.floor(height / 2);
+    const islandSlots = [];
+
+    if (width > 6 && height > 6) {
+        if (difficulty === 'hard') {
+            // DOUBLE ISLAND STRUCTURE for Hard Mode
+            // Two parallel horizontal islands to fill the massive 14x10 space
+            const islandRows = [midZ - 2, midZ + 2];
+            islandRows.forEach(row => {
+                for (let x = midX - 2; x <= midX + 2; x++) {
+                    if (x > 0 && x < width - 1) {
+                        islandSlots.push({ x, z: row });
+                        layout[row][x] = { type: 'counter', id: `island_${x}_${row}` };
+                    }
+                }
+            });
+        } else {
+            // Simple 1x1 island for Easy
+            islandSlots.push({ x: midX, z: midZ });
+            layout[midZ][midX] = { type: 'counter', id: `island_${midX}_${midZ}` };
+        }
+    }
+
+    // --- 2. PLACE SEASONING ON ISLAND OR PERIMETER ---
+    // High probability for Hard mode to use the new industrial islands
+    const seasoningProbability = (difficulty === 'hard') ? 0.8 : 0.3;
+    seasoning.forEach(st => {
+        if (islandSlots.length > 0 && Math.random() < seasoningProbability) {
+            const pos = islandSlots.pop();
+            layout[pos.z][pos.x] = st;
+        } else if (slots.length > 0) {
+            const pos = slots.pop();
+            layout[pos.z][pos.x] = st;
+        }
+    });
+
+    // --- 3. UTILITY STATIONS (Trash, Serve, Plates) ---
     const bottomWallSlots = slots.filter(p => p.z === height - 1).sort((a, b) => a.x - b.x);
     utility.forEach((u, i) => {
         if (i < bottomWallSlots.length) {
@@ -259,13 +441,12 @@ function generateLayout(width, height, ingredientSet, activeRecipes, difficulty)
             layout[pos.z][pos.x] = u;
             slots = slots.filter(s => !(s.x === pos.x && s.z === pos.z));
         } else if (slots.length > 0) {
-            // Overflow: place on any remaining perimeter slot
             const pos = slots.pop();
             layout[pos.z][pos.x] = u;
         }
     });
 
-    // 2. Place Crates randomly on the remaining perimeter
+    // --- 4. CRATES (Ingredients) ---
     crates.forEach((crate) => {
         if (slots.length > 0) {
             const pos = slots.pop();
@@ -273,37 +454,32 @@ function generateLayout(width, height, ingredientSet, activeRecipes, difficulty)
         }
     });
 
-    // 3. Place Cooking/Chop stations randomly in the remaining slots to break symmetry
-    cooking.forEach(st => {
-        if (slots.length > 0) {
+    // --- 5. TOOLS (Stove, Chopping, Oven, Roller, Sink) ---
+    // Distribute tools between islands and perimeter in Hard mode
+    tools.forEach(st => {
+        if (difficulty === 'hard' && islandSlots.length > 0 && Math.random() > 0.3) {
+            const pos = islandSlots.pop();
+            layout[pos.z][pos.x] = st;
+        } else if (slots.length > 0) {
             const pos = slots.pop();
             layout[pos.z][pos.x] = st;
         }
     });
 
-    // 4. Fill 50% of remaining perimeter with counters, leave rest open for "Walls"
+    // --- 6. FILL REMAINING PERIMETER ---
+    // Fixed: high fill rate for Hard mode
+    const fillRate = (difficulty === 'hard') ? 0.05 : 0.3;
     slots.forEach(pos => {
-        if (Math.random() > 0.3) {
+        if (Math.random() > fillRate) {
             layout[pos.z][pos.x] = { type: 'counter', id: `c_${pos.x}_${pos.z}` };
         }
     });
 
-    // 5. Add Corners always (structure)
+    // Add Corners always
     layout[0][0] = { type: 'counter', id: 'corner1' };
     layout[0][width - 1] = { type: 'counter', id: 'corner2' };
     layout[height - 1][0] = { type: 'counter', id: 'corner3' };
     layout[height - 1][width - 1] = { type: 'counter', id: 'corner4' };
-
-    // 6. Island Logic - make it more than just a block
-    const midX = Math.floor(width / 2);
-    const midZ = Math.floor(height / 2);
-    if (width > 6 && height > 6) {
-        layout[midZ][midX] = { type: 'counter', id: 'island1' };
-        if (width > 8) {
-            layout[midZ][midX - 1] = { type: 'counter', id: 'island2' };
-            layout[midZ - 1][midX] = { type: 'counter', id: 'island3' }; // L-shaped
-        }
-    }
 
     return layout;
 }
@@ -313,21 +489,132 @@ const rooms = {};
 const roomCodes = {};
 const friends = {};
 const roomCodeToId = {};
+const socketToUser = {}; // Map socket.id to userId
+const userToSocket = {}; // Map userId to socket.id (for single device enforcement)
+const disconnectedPlayers = {}; // Track disconnected players: { userId: { roomId, gameSessionId, playerData, disconnectTime } }
 
-function buildRoomListPayload() {
-    const visibleRooms = Object.values(rooms).filter(r => r.mode !== 'single');
-    return visibleRooms.map(r => {
+// ============ USER STATUS HELPERS ============
+function getUserStatus(userId) {
+    const socketId = userToSocket[userId];
+    if (!socketId) return 'offline';
+
+    // Check if socket actually exists and is connected
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket || !socket.connected) return 'offline';
+
+    const player = findPlayer(socketId);
+    if (player) {
+        const room = rooms[player.roomId];
+        if (room) {
+            // playing -> ingame
+            // lobby or gameover -> lobby
+            const status = (room.state === 'playing') ? 'ingame' : 'lobby';
+            console.log(`[Status] User ${userId} is ${status} (Room: ${player.roomId}, State: ${room.state})`);
+            return status;
+        }
+    }
+
+    console.log(`[Status] User ${userId} is online (no room found)`);
+    return 'online';
+}
+
+function broadcastStatusUpdate(userId) {
+    const user = users[userId];
+    if (!user || !user.friends) return;
+
+    const status = getUserStatus(userId);
+    const name = user.username || user.name;
+
+    user.friends.forEach(friendId => {
+        const friendSocketId = userToSocket[friendId];
+        if (friendSocketId) {
+            const friendSocket = io.sockets.sockets.get(friendSocketId);
+            if (friendSocket) {
+                friendSocket.emit('friendStatusUpdate', {
+                    userId: userId,
+                    name: name,
+                    status: status
+                });
+            }
+        }
+    });
+}
+
+function buildRoomListPayload(currentUserId = null) {
+    const allRooms = Object.values(rooms);
+
+    return allRooms.map(r => {
+        const activePlayers = Object.keys(r.players).length;
         const maxPlayers = r.mode === 'single' ? 1 : r.mode === 'multi_vs' ? 2 : 3;
+
+        // ── Determine if this user has a valid reconnect slot for this room ──
+        let canReconnect = false;
+        if (currentUserId && disconnectedPlayers[currentUserId]) {
+            const rd = disconnectedPlayers[currentUserId];
+            if (rd.roomId === r.id) {
+                // Room must still exist and not be finished
+                const gameNotOver = r.state !== 'gameover' && r.state !== 'finished';
+                // Session must match: if no session was saved yet (lobby disconnect)
+                // or the saved session equals the current session
+                const sessionOk = !rd.gameSessionId || rd.gameSessionId === r.gameSessionId;
+
+                if (gameNotOver && sessionOk) {
+                    canReconnect = true;
+                } else {
+                    // Only purge entry if game provably ended or a brand-new session started
+                    const isStale = !gameNotOver ||
+                        (rd.gameSessionId && r.gameSessionId && rd.gameSessionId !== r.gameSessionId);
+                    if (isStale) {
+                        console.log(`🗑️ Purging stale reconnect slot for ${currentUserId} (game ended or new session)`);
+                        delete disconnectedPlayers[currentUserId];
+                    }
+                    // canReconnect stays false
+                }
+            }
+        }
+
+        // ── VISIBILITY LOGIC ──
+        // Only show the room if:
+        // 1. This specific user has a valid reconnect slot (canReconnect === true)
+        // 2. OR the room has active players (not a ghost room)
+        const shouldShow = canReconnect || activePlayers > 0;
+        if (!shouldShow) return null;
+
         return {
             id: r.id,
             mode: r.mode,
             difficulty: r.difficulty,
-            players: Object.keys(r.players).length,
+            players: activePlayers,
             maxPlayers,
             state: r.state,
             hasPassword: r.hasPassword,
-            description: r.description,
+            canReconnect
         };
+    }).filter(Boolean);
+}
+
+// Clean up stale reconnection data (older than 30 minutes)
+function cleanupStaleReconnectData() {
+    const now = Date.now();
+    const staleTimeout = 30 * 60 * 1000; // 30 minutes
+
+    Object.keys(disconnectedPlayers).forEach(userId => {
+        const data = disconnectedPlayers[userId];
+        if (now - data.disconnectTime > staleTimeout) {
+            delete disconnectedPlayers[userId];
+            console.log(`🗑️ Cleaned up stale reconnect data for user ${userId}`);
+        }
+    });
+}
+
+// Run cleanup every 10 minutes
+setInterval(cleanupStaleReconnectData, 10 * 60 * 1000);
+
+function broadcastRoomList() {
+    // Send personalized room list to each connected socket
+    io.sockets.sockets.forEach((socket) => {
+        const userId = socketToUser[socket.id];
+        socket.emit('roomList', buildRoomListPayload(userId));
     });
 }
 
@@ -378,6 +665,47 @@ function selectContent(difficulty) {
     });
 
     return { recipes: finalRecipes, ingredients: finalIngredients };
+}
+
+function isValidSpawn(room, x, z) {
+    const gw = room.config.GRID_W;
+    const gh = room.config.GRID_H;
+    if (x < 0 || x >= gw || z < 0 || z >= gh) return false;
+    // Must be floor (0)
+    if (room.kitchen[z][x] !== 0) return false;
+
+    // Check if any player is already here (grid-aligned check)
+    const occupied = Object.values(room.players).some(p =>
+        Math.abs(p.gridX - x) < 0.5 && Math.abs(p.gridZ - z) < 0.5
+    );
+    return !occupied;
+}
+
+function findSafeSpawn(room, targetX, targetZ) {
+    const gw = room.config.GRID_W;
+    const gh = room.config.GRID_H;
+
+    // Check target first
+    if (isValidSpawn(room, targetX, targetZ)) {
+        return { x: targetX, z: targetZ };
+    }
+
+    // Spiral search for nearest floor tile
+    const maxDist = Math.max(gw, gh);
+    for (let d = 1; d < maxDist; d++) {
+        for (let x = targetX - d; x <= targetX + d; x++) {
+            for (let z = targetZ - d; z <= targetZ + d; z++) {
+                // Perimeter only for this distance level
+                if (x === targetX - d || x === targetX + d || z === targetZ - d || z === targetZ + d) {
+                    if (isValidSpawn(room, x, z)) {
+                        return { x, z };
+                    }
+                }
+            }
+        }
+    }
+    // Fallback to original if absolutely no space found (unlikely)
+    return { x: targetX, z: targetZ };
 }
 
 function generateRoomCode() {
@@ -538,6 +866,7 @@ function createRoom(roomId, settings) {
         countdownTimer: null,
         isStarting: false,
         gameStartAt: null,
+        gameSessionId: null, // Unique ID for each game session
         orderTimer: null,
         gameTimer: null,
         tickTimer: null,
@@ -546,7 +875,6 @@ function createRoom(roomId, settings) {
         highScore: 0,
         roomCode: roomCode,
         password: settings.password || null,
-        description: settings.description || '',
         hasPassword: !!settings.password,
         isPaused: false,
         pausedAt: null,
@@ -606,8 +934,6 @@ function checkOrderExpiry(room) {
         room.orders = room.orders.filter(ord => ord.id !== o.id);
         room.combo = 0;
         room.ordersFailed++;
-        // Order expiry penalty: Shared for coop/single, individual for VS (applied to room for simplicity)
-        room.score = Math.max(0, room.score - 5); // penalty
         io.to(room.id).emit('orderExpired', { orderId: o.id, score: room.score });
     });
 }
@@ -688,15 +1014,378 @@ function checkPlateMatchesOrder(plateContents, room) {
 io.on('connection', (socket) => {
     console.log(`🍳 Chef connected: ${socket.id}`);
 
-    socket.emit('roomList', buildRoomListPayload());
+    socket.emit('roomList', buildRoomListPayload(socketToUser[socket.id]));
 
     socket.on('getRooms', () => {
-        socket.emit('roomList', buildRoomListPayload());
+        socket.emit('roomList', buildRoomListPayload(socketToUser[socket.id]));
+    });
+
+    socket.on('register', async (data) => {
+        const { username, password } = data;
+        const userId = 'user_' + username.toLowerCase();
+
+        if (users[userId]) {
+            return socket.emit('loginError', { msg: 'Username already taken!' });
+        }
+
+        try {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            users[userId] = {
+                id: userId,
+                username: username,
+                name: username, // Default display name
+                type: 'account',
+                password: hashedPassword,
+                createdAt: Date.now(),
+                stats: {
+                    gamesPlayed: 0,
+                    scoreTotal: 0,
+                    dishesServed: 0,
+                    chefHatPoints: 0,
+                    gameScores: [],
+                    achievements: []
+                },
+                profileImage: 'chef_1', // Default profile image
+                profileColor: '#FF6B6B', // Default profile color
+                title: '', // Custom title
+                bio: '' // Profile bio
+            };
+            persistUser(userId);
+            socket.emit('registerSuccess', { msg: 'Account created! Please login now.' });
+            console.log(`🆕 New User Registered: ${username}`);
+        } catch (e) {
+            console.error('Registration error:', e);
+            socket.emit('loginError', { msg: 'Server error during registration' });
+        }
+    });
+
+    socket.on('userLogin', async (data) => {
+        const { username, password, autoLogin, userId } = data;
+
+        // ── Helper: finalize login for an account userId ──
+        const finalizeAccountLogin = (uid, user) => {
+            // Kick duplicate session
+            if (userToSocket[uid] && userToSocket[uid] !== socket.id) {
+                const old = io.sockets.sockets.get(userToSocket[uid]);
+                if (old) {
+                    old.emit('forceLogout', { msg: 'Your account was logged in from another device.' });
+                    old.disconnect(true);
+                }
+            }
+            socketToUser[socket.id] = uid;
+            userToSocket[uid] = socket.id;
+            const clone = { ...user };
+            delete clone.password;
+            socket.emit('loginSuccess', clone);
+            // Send personalized room list immediately so reconnect button shows up
+            socket.emit('roomList', buildRoomListPayload(uid));
+            broadcastStatusUpdate(uid);
+            console.log(`👤 Account login: ${uid}`);
+        };
+
+        // Handle auto-login from localStorage
+        if (autoLogin && userId) {
+            const user = users[userId];
+            if (user && user.type === 'account') {
+                finalizeAccountLogin(userId, user);
+                return;
+            }
+            // If user not found for auto-login, fall through to password login
+        }
+
+        const calculatedUserId = 'user_' + (username || '').toLowerCase();
+        const user = users[calculatedUserId];
+        if (!user || user.type !== 'account') {
+            return socket.emit('loginError', { msg: 'User not found!' });
+        }
+
+        try {
+            const match = await bcrypt.compare(password, user.password);
+            if (match) {
+                finalizeAccountLogin(calculatedUserId, user);
+            } else {
+                socket.emit('loginError', { msg: 'Invalid password!' });
+            }
+        } catch (e) {
+            console.error('Login error:', e);
+            socket.emit('loginError', { msg: 'Server error during login' });
+        }
+    });
+
+    socket.on('guestLogin', (data) => {
+        let userId = data.userId;
+        let name = data.name || 'Chef';
+
+        if (!userId || !userId.startsWith('guest_')) {
+            userId = 'guest_' + Math.random().toString(36).substr(2, 9);
+        }
+        // Note: guests CAN have reconnect data (saved by userId = guest_xxx)
+
+        // Check if guest is already logged in on another device
+        if (userToSocket[userId] && userToSocket[userId] !== socket.id) {
+            const existingSocket = io.sockets.sockets.get(userToSocket[userId]);
+            if (existingSocket) {
+                // Force disconnect the other session
+                existingSocket.emit('forceLogout', {
+                    msg: 'Your guest session has been opened on another device.'
+                });
+                existingSocket.disconnect(true);
+                console.log(`🔒 Force logged out guest ${name} from previous device`);
+            }
+        }
+
+        // Guests are kept in memory but not saved to disk
+        if (!users[userId]) {
+            users[userId] = {
+                id: userId,
+                name: name,
+                type: 'guest',
+                createdAt: Date.now(),
+                stats: {
+                    gamesPlayed: 0,
+                    scoreTotal: 0,
+                    dishesServed: 0,
+                    chefHatPoints: 0,
+                    gameScores: [],
+                    achievements: []
+                }
+            };
+        } else {
+            users[userId].name = name;
+        }
+
+        socketToUser[socket.id] = userId; // Track socket to user mapping
+        userToSocket[userId] = socket.id; // Track user to socket mapping
+        socket.emit('loginSuccess', users[userId]);
+        // Send personalized room list immediately so reconnect button shows up
+        socket.emit('roomList', buildRoomListPayload(userId));
+        broadcastStatusUpdate(userId);
+        console.log(`💟 Guest: ${name} (${userId})`);
+    });
+
+    socket.on('updateProfile', async (data) => {
+        try {
+            const userId = socketToUser[socket.id];
+            if (!userId || !users[userId]) {
+                return socket.emit('updateProfileError', { msg: 'Session error. Please logout and login again.' });
+            }
+
+            const user = users[userId];
+            if (user.type !== 'account') {
+                return socket.emit('updateProfileError', { msg: 'Only registered accounts can customize profile!' });
+            }
+
+            const { newUsername, newProfileImage, newProfileColor, newTitle, newBio } = data;
+            console.log(`📡 Update Profile Request from ${userId}:`, { newUsername, newProfileImage });
+
+            // 1. Check Name Uniqueness if changed
+            if (newUsername && newUsername !== user.name) {
+                const newId = 'user_' + newUsername.toLowerCase();
+
+                // Check if ID is taken by someone ELSE
+                if (users[newId] && newId !== userId) {
+                    console.log(`⚠️ Profile Update Denied: ID conflict for ${newId}`);
+                    return socket.emit('updateProfileError', { msg: 'This username is already taken!' });
+                }
+
+                // Check if any other user has this display name (case insensitive)
+                const nameExists = Object.values(users).some(u =>
+                    u && u.id !== userId && u.name && u.name.toLowerCase() === newUsername.toLowerCase()
+                );
+                if (nameExists) {
+                    console.log(`⚠️ Profile Update Denied: Name conflict for ${newUsername}`);
+                    return socket.emit('updateProfileError', { msg: 'This display name is already taken!' });
+                }
+
+                user.name = newUsername;
+                user.username = newUsername; // Sync for consistency
+            }
+
+            if (newProfileImage) {
+                user.profileImage = newProfileImage;
+            }
+
+            if (newProfileColor && /^#[0-9A-F]{6}$/i.test(newProfileColor)) {
+                user.profileColor = newProfileColor;
+            }
+
+            if (newTitle !== undefined) {
+                user.title = (newTitle || '').slice(0, 50); // Max 50 characters
+            }
+
+            if (newBio !== undefined) {
+                user.bio = (newBio || '').slice(0, 200); // Max 200 characters
+            }
+
+            persistUser(userId);
+
+            const clone = { ...user };
+            delete clone.password;
+            socket.emit('updateProfileSuccess', { msg: 'Profile updated!', user: clone });
+
+            // Also update the user in the room if they are in one
+            const player = findPlayer(socket.id);
+            if (player) {
+                player.name = user.name;
+                player.profileImage = user.profileImage;
+                player.profileColor = user.profileColor;
+                player.title = user.title;
+                player.bio = user.bio;
+                io.to(player.roomId).emit('playerProfileUpdated', {
+                    id: socket.id,
+                    name: player.name,
+                    profileImage: player.profileImage,
+                    profileColor: player.profileColor,
+                    title: player.title,
+                    bio: player.bio
+                });
+            }
+
+            console.log(`✅ Profile Updated for ${userId}: Name=${user.name}, Image=${user.profileImage}`);
+        } catch (error) {
+            console.error('❌ Update Profile Error:', error);
+            socket.emit('updateProfileError', { msg: 'Server error while saving profile.' });
+        }
+    });
+
+    // ── RECONNECT (dedicated event) ───────────────────────────────────────────
+    socket.on('reconnectRoom', (data) => {
+        const roomId = data.roomId;
+        const userId = socketToUser[socket.id];
+
+        // No userId means not logged in yet — can't reconnect
+        if (!userId) {
+            socket.emit('reconnectFailed', { message: 'Not authenticated. Please log in again.' });
+            return;
+        }
+
+        const savedData = disconnectedPlayers[userId];
+        if (!savedData || savedData.roomId !== roomId) {
+            // No saved data, or room mismatch — clear and tell client to do a normal join
+            if (savedData) delete disconnectedPlayers[userId];
+            socket.emit('reconnectFailed', { message: 'Session expired. Joining as new player.', fallbackJoin: true, roomId });
+            return;
+        }
+
+        const room = rooms[roomId];
+        if (!room) {
+            delete disconnectedPlayers[userId];
+            socket.emit('reconnectFailed', { message: 'Room no longer exists.' });
+            return;
+        }
+
+        // Game-over / finished: can't reconnect, send them back to lobby
+        if (room.state === 'gameover' || room.state === 'finished') {
+            delete disconnectedPlayers[userId];
+            socket.emit('reconnectFailed', { message: 'The game already ended.' });
+            return;
+        }
+
+        // New session started (different gameSessionId): treat as new player
+        const sessionChanged = savedData.gameSessionId &&
+            room.gameSessionId &&
+            savedData.gameSessionId !== room.gameSessionId;
+        if (sessionChanged) {
+            delete disconnectedPlayers[userId];
+            // Don't hard-fail — tell client to join normally as a new player
+            socket.emit('reconnectFailed', { message: 'A new game started. Joining as new player.', fallbackJoin: true, roomId });
+            return;
+        }
+
+        console.log(`🔄 Reconnecting: ${data.name} → room ${roomId} (state: ${room.state})`);
+
+        // Remove the stale (old-socket) entry from the room if it's still there
+        const oldSocketId = savedData.playerData.id;
+        if (oldSocketId && room.players[oldSocketId]) {
+            console.log(`🧹 Removing old socket slot: ${oldSocketId}`);
+            delete room.players[oldSocketId];
+            io.to(roomId).emit('playerLeft', oldSocketId);
+        }
+
+        // Restore player with new socket ID
+        const restoredPlayer = { ...savedData.playerData, id: socket.id };
+        if (room.state === 'lobby') restoredPlayer.isReady = false;
+
+        // ── AVOID SPAWNING ON TOP OF OTHERS ──
+        const safeSpawn = findSafeSpawn(room, restoredPlayer.gridX, restoredPlayer.gridZ);
+        if (safeSpawn.x !== restoredPlayer.gridX || safeSpawn.z !== restoredPlayer.gridZ) {
+            console.log(`🔀 Adjusting spawn for reconnected player ${restoredPlayer.name} to avoid collision: (${restoredPlayer.gridX}, ${restoredPlayer.gridZ}) -> (${safeSpawn.x}, ${safeSpawn.z})`);
+            restoredPlayer.gridX = safeSpawn.x;
+            restoredPlayer.gridZ = safeSpawn.z;
+            restoredPlayer.posX = safeSpawn.x * TILE_SIZE;
+            restoredPlayer.posZ = safeSpawn.z * TILE_SIZE;
+            restoredPlayer.targetX = restoredPlayer.posX;
+            restoredPlayer.targetZ = restoredPlayer.posZ;
+        }
+
+        room.players[socket.id] = restoredPlayer;
+        socket.join(roomId);
+
+        // Consume the reconnect slot immediately after joining
+        delete disconnectedPlayers[userId];
+
+        // ── Send the full world state to the reconnecting player ──
+        socket.emit('init', {
+            playerId: socket.id,
+            isHost: restoredPlayer.isHost,
+            isReconnect: true,
+            roomCode: room.roomCode,
+            room: {
+                id: room.id,
+                players: room.players,
+                kitchen: room.kitchen,
+                stations: room.stations,
+                orders: room.orders,
+                score: room.score,
+                timeLeft: room.timeLeft,
+                state: room.state,
+                mode: room.mode,
+                difficulty: room.difficulty,
+                activeRecipes: room.activeRecipes,
+                activeIngredients: room.activeIngredients
+            },
+            config: {
+                TILE_SIZE: room.config.TILE_SIZE,
+                GRID_W: room.config.GRID_W,
+                GRID_H: room.config.GRID_H,
+                INGREDIENTS: room.activeIngredients,
+                RECIPES: room.activeRecipes
+            }
+        });
+
+        // ── Notify everyone else the player is back ──
+        socket.to(roomId).emit('playerReconnected', restoredPlayer);
+
+        // Sync full station / order / player state to entire room so all POVs match
+        io.to(roomId).emit('gameStateUpdate', {
+            stations: room.stations,
+            orders: room.orders,
+            score: room.score,
+            players: room.players
+        });
+
+        socket.emit('reconnectSuccess', {
+            message: 'Successfully rejoined!',
+            roomState: room.state
+        });
+
+        console.log(`✅ ${restoredPlayer.name} reconnected to ${roomId} (${room.state})`);
+        broadcastRoomList();
+        if (userId) broadcastStatusUpdate(userId);
     });
 
     socket.on('joinRoom', (data) => {
         const roomId = data.roomId || 'kitchen_1';
+        const userId = socketToUser[socket.id];
 
+        // ── If this user has pending reconnect data for THIS room, redirect to reconnectRoom flow ──
+        if (userId && disconnectedPlayers[userId] && disconnectedPlayers[userId].roomId === roomId) {
+            // Delegate to the dedicated reconnect handler instead of going through normal join
+            socket.emit('useReconnect', { roomId }); // tell client to use reconnectRoom event
+            return;
+        }
+
+        // Normal join flow
         // Check if room exists and has password
         const existingRoom = rooms[roomId];
         if (existingRoom && existingRoom.hasPassword && !data.password) {
@@ -712,7 +1401,6 @@ io.on('connection', (socket) => {
             }
         }
 
-        // Pass mode/diff settings if this is a new room or re-configuring
         const settings = {
             mode: data.mode || 'single',
             difficulty: data.difficulty || 'easy'
@@ -720,8 +1408,6 @@ io.on('connection', (socket) => {
 
         const room = getOrCreateRoom(roomId, settings);
 
-        // If joining an existing room, room mode is already set. 
-        // We might want to enforce max players for single player or coop
         if (room.mode === 'single' && Object.keys(room.players).length >= 1) {
             socket.emit('notification', { msg: 'Single player room full!', type: 'error' });
             return;
@@ -753,44 +1439,14 @@ io.on('connection', (socket) => {
         // colorIdx is 0 for P1, 1 for P2, etc.
         const spawnKey = colorIdx + 1;
         if (room.spawns && room.spawns[spawnKey]) {
-            spawn = room.spawns[spawnKey];
-            console.log(`📍 Using custom spawn P${spawnKey} for ${socket.id}`);
+            const requestedSpawn = room.spawns[spawnKey];
+            spawn = findSafeSpawn(room, requestedSpawn.x, requestedSpawn.z);
+            console.log(`📍 Using safe custom spawn P${spawnKey} for ${socket.id} at (${spawn.x}, ${spawn.z})`);
         } else {
             // 2. Fallback to spiral search if no custom spawn
             // Start searching from center
             const center = { x: Math.floor(gw / 2), z: Math.floor(gh / 2) };
-            const maxDist = Math.max(gw, gh);
-            let found = false;
-
-            // Check center first
-            if (room.kitchen[center.z] && room.kitchen[center.z][center.x] === 0) {
-                spawn = center;
-                found = true;
-            }
-
-            if (!found) {
-                for (let d = 1; d < maxDist && !found; d++) {
-                    // Check perimeter of square size d
-                    for (let x = center.x - d; x <= center.x + d; x++) {
-                        for (let z = center.z - d; z <= center.z + d; z++) {
-                            // Scan only the perimeter
-                            if (x >= 0 && x < gw && z >= 0 && z < gh) {
-                                // Check if floor (0) and not occupied by another player
-                                if (room.kitchen[z][x] === 0) {
-                                    // Check if any player is already here (approx)
-                                    const occupied = Object.values(room.players).some(p => Math.abs(p.gridX - x) < 0.5 && Math.abs(p.gridZ - z) < 0.5);
-                                    if (!occupied) {
-                                        spawn = { x, z };
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (found) break;
-                    }
-                }
-            }
+            spawn = findSafeSpawn(room, center.x, center.z);
         }
 
         // const playerColors = ... (already defined)
@@ -803,6 +1459,9 @@ io.on('connection', (socket) => {
 
         const player = {
             id: socket.id,
+            userId: userId,
+            userType: users[userId] ? users[userId].type : 'guest',
+            username: users[userId] ? users[userId].username : null,
             name: data.name || `Chef_${socket.id.slice(0, 4)}`,
             roomId: roomId,
             gridX: spawn.x,
@@ -815,6 +1474,10 @@ io.on('connection', (socket) => {
             holding: null,  // { type: 'ingredient'|'plate', data: {...} }
             color: playerColors[colorIdx],
             emoji: playerEmojis[colorIdx],
+            profileImage: users[userId] ? users[userId].profileImage : 'chef_1',
+            profileColor: users[userId] ? users[userId].profileColor : '#FF6B6B',
+            title: users[userId] ? users[userId].title : '',
+            bio: users[userId] ? users[userId].bio : '',
             isChopping: false,
             chopStationId: null,
             score: 0,
@@ -840,6 +1503,7 @@ io.on('connection', (socket) => {
                 timeLeft: room.timeLeft,
                 state: room.state,
                 mode: room.mode,
+                difficulty: room.difficulty,
             },
             config: {
                 TILE_SIZE: room.config.TILE_SIZE,
@@ -856,10 +1520,15 @@ io.on('connection', (socket) => {
 
         console.log(`👨‍🍳 ${player.name} joined room ${roomId} (${Object.keys(room.players).length} players)`);
 
+        broadcastRoomList(); // Update player counts on server list
+
         // Auto-start single player games immediately (skip waiting room)
         if (room.mode === 'single' && room.state === 'lobby') {
             startGame(room);
         }
+
+        // Broadcast status update for the joining player
+        if (userId) broadcastStatusUpdate(userId);
     });
 
     // Player movement
@@ -968,7 +1637,7 @@ io.on('connection', (socket) => {
         const baseSpeed = ingredient.chopTime || 1000;
         const increment = 10000 / baseSpeed; // 10000 ensures chopTime is literal ms (3s = 3000ms)
         station.chopProgress += increment;
-        
+
         // SAVE PROGRESS: Update ingredient's progress too
         if (station.contents) {
             station.contents.chopProgress = station.chopProgress;
@@ -1024,7 +1693,7 @@ io.on('connection', (socket) => {
         const rollTime = ingConfig.rollTime || 3000;
 
         station.rollProgress += (10000 / rollTime);
-        
+
         // SAVE PROGRESS: Update dough's progress too
         if (station.contents) {
             station.contents.rollProgress = station.rollProgress;
@@ -1075,7 +1744,7 @@ io.on('connection', (socket) => {
         const washTime = ingConfig.washTime || 2000;
 
         station.washProgress = (station.washProgress || 0) + (10000 / washTime);
-        
+
         // SAVE PROGRESS: Update rice's progress too
         if (station.contents) {
             station.contents.washProgress = station.washProgress;
@@ -1088,6 +1757,56 @@ io.on('connection', (socket) => {
                 station.contents.washProgress = 100;
             }
             io.to(room.id).emit('notification', { msg: '✅ Rice washed! Now cook it!', type: 'success' });
+        }
+
+        io.to(room.id).emit('stationUpdate', {
+            stationId: station.id,
+            station: sanitizeStation(station),
+        });
+    });
+
+    // Garnish action (hold spacebar at a seasoning station while rareSeasoning is active)
+    socket.on('garnishAction', (data) => {
+        const player = findPlayer(socket.id);
+        if (!player) return;
+        const room = rooms[player.roomId];
+        if (!room || room.state !== 'playing') return;
+
+        const station = room.stations[data.stationId];
+        // Must be a seasoning station with an ACTIVE rare spawn
+        if (!station || station.type !== 'seasoning' || !station.rareSeasoning) return;
+
+        // Target must be a plate on the station
+        if (!station.contents || station.contents.type !== 'plate') return;
+        if (station.contents.seasoning) return; // Already garnished
+
+        // Only garnish fully assembled food
+        const isAssembled = Object.values(RECIPES).some(recipe =>
+            checkPlateMatchesOrder(station.contents, recipe)
+        );
+
+        if (!isAssembled) {
+            if (Date.now() % 20 === 0) {
+                socket.emit('notification', { msg: "⚠️ Dish is not fully assembled!", type: 'error' });
+            }
+            return;
+        }
+
+        // Garnish progress (Faster now because it only lasts 5s)
+        if (typeof station.garnishProgress !== 'number') station.garnishProgress = 0;
+        station.garnishProgress += 10; // 2x faster than before
+
+        if (station.garnishProgress >= 100) {
+            station.contents.seasoning = station.rareSeasoning; // Use station's active seasoning
+            station.garnishProgress = 0;
+            // Rare seasoning is spent
+            station.rareSeasoning = null;
+            station.rareSeasoningExpires = null;
+
+            io.to(room.id).emit('notification', {
+                msg: `✨ DISH GARNISHED WITH ${station.contents.seasoning.toUpperCase()}! (+8 pts)`,
+                type: 'success'
+            });
         }
 
         io.to(room.id).emit('stationUpdate', {
@@ -1144,7 +1863,7 @@ io.on('connection', (socket) => {
         if (!room.isPaused) {
             room.isPaused = true;
             room.pausedAt = Date.now();
-            
+
             console.log(`⏸️  Game paused in room ${room.id}`);
             socket.emit('gamePaused', { isPaused: true });
         }
@@ -1201,14 +1920,27 @@ io.on('connection', (socket) => {
             const room = rooms[player.roomId];
             if (room) {
                 const wasHost = player.isHost;
-                delete room.players[socket.id];
+                const userId = socketToUser[socket.id];
 
-                // If host left, assign new host (first remaining player)
+                // Save state so they can reconnect even if they explicitly left
+                const gameCanContinue = room.state !== 'gameover' && room.state !== 'finished';
+                if (gameCanContinue && userId) {
+                    disconnectedPlayers[userId] = {
+                        roomId: room.id,
+                        gameSessionId: room.gameSessionId,
+                        playerData: { ...player },
+                        disconnectTime: Date.now()
+                    };
+                    console.log(`💾 Saved reconnect state for ${player.name} (${userId}) after explicit leave`);
+                }
+
+                // Remove from active players
+                delete room.players[socket.id];
                 if (wasHost && Object.keys(room.players).length > 0) {
                     const remainingPlayerIds = Object.keys(room.players).sort();
                     const newHostId = remainingPlayerIds[0];
                     room.players[newHostId].isHost = true;
-                    room.players[newHostId].isReady = false; // Host is default ready but doesn't use the badge
+                    room.players[newHostId].isReady = false;
                     io.to(room.id).emit('hostChanged', { newHostId: newHostId });
                     console.log(`👑 New host assigned: ${room.players[newHostId].name}`);
                 }
@@ -1216,14 +1948,22 @@ io.on('connection', (socket) => {
                 io.to(room.id).emit('playerLeft', socket.id);
                 console.log(`👋 Player ${player.name} left room ${room.id}`);
 
-                // Clean up empty rooms
+                // Clean up empty rooms immediately — NO ghost 0-player rooms allowed
                 if (Object.keys(room.players).length === 0) {
                     clearTimers(room);
                     delete rooms[room.id];
                     console.log(`🗑️ Room ${room.id} deleted (empty)`);
+
+                    // Wipe any reconnect data for this dead room
+                    Object.keys(disconnectedPlayers).forEach(uid => {
+                        if (disconnectedPlayers[uid].roomId === room.id) {
+                            delete disconnectedPlayers[uid];
+                        }
+                    });
                 }
 
-                io.emit('roomList', buildRoomListPayload());
+                broadcastRoomList();
+                if (userId) broadcastStatusUpdate(userId);
             }
         }
     });
@@ -1231,39 +1971,80 @@ io.on('connection', (socket) => {
     // Disconnect
     socket.on('disconnect', () => {
         const player = findPlayer(socket.id);
+        const userId = socketToUser[socket.id];
+
+        console.log('Player disconnecting:', socket.id, 'userId:', userId);
+
         if (player) {
             const room = rooms[player.roomId];
             if (room) {
-                // If player was already removed via leaveRoom, this might be redundant but safe
-                if (room.players[socket.id]) {
-                    const wasHost = room.players[socket.id].isHost;
-                    delete room.players[socket.id];
+                console.log('Room state:', room.state, 'Room ID:', room.id);
 
-                    // If host disconnected, assign new host
-                    if (wasHost && Object.keys(room.players).length > 0) {
-                        const remainingPlayerIds = Object.keys(room.players).sort();
-                        const newHostId = remainingPlayerIds[0];
-                        room.players[newHostId].isHost = true;
-                        room.players[newHostId].isReady = false; // Reset ready status for new host
-                        io.to(room.id).emit('hostChanged', { newHostId: newHostId });
-                        console.log(`👑 New host assigned after disconnect: ${room.players[newHostId].name}`);
-                    }
+                // Decide whether this player can reconnect
+                const gameCanContinue = room.state !== 'gameover' && room.state !== 'finished';
 
+                // Always remove their active player slot so others don't see a ghost
+                const wasHost = room.players[socket.id]?.isHost || false;
+                delete room.players[socket.id];
+
+                if (gameCanContinue && userId) {
+                    // ── Save state so they can reconnect ──
+                    disconnectedPlayers[userId] = {
+                        roomId: room.id,
+                        gameSessionId: room.gameSessionId,
+                        playerData: { ...player },
+                        disconnectTime: Date.now()
+                    };
+                    console.log(`💾 Saved reconnect state for ${player.name} (${userId}) – session ${room.gameSessionId}`);
+
+                    // Tell others: player disconnected but can come back
+                    io.to(room.id).emit('playerDisconnected', {
+                        id: socket.id,
+                        name: player.name,
+                        canReconnect: true
+                    });
+                } else {
+                    // Game over or guest — just remove cleanly
                     io.to(room.id).emit('playerLeft', socket.id);
                 }
 
-                // Clean up empty rooms
+                // Assign new host if the host dropped
+                if (wasHost && Object.keys(room.players).length > 0) {
+                    const newHostId = Object.keys(room.players).sort()[0];
+                    room.players[newHostId].isHost = true;
+                    room.players[newHostId].isReady = false;
+                    io.to(room.id).emit('hostChanged', { newHostId });
+                    console.log(`👑 New host after disconnect: ${room.players[newHostId].name}`);
+                }
+
+                // Keep room alive only when there are pending reconnects
                 if (Object.keys(room.players).length === 0) {
-                    clearTimers(room);
-                    delete rooms[room.id];
-                    console.log(`🗑️ Room ${room.id} deleted (empty)`);
+                    const hasPending = Object.values(disconnectedPlayers).some(dp => dp.roomId === room.id);
+                    if (!hasPending) {
+                        clearTimers(room);
+                        delete rooms[room.id];
+                        console.log(`🗑️ Room ${room.id} deleted (empty, no pending reconnects)`);
+                    } else {
+                        console.log(`⏳ Room ${room.id} kept alive for reconnection (HIDDEN from others)`);
+                    }
                 }
             }
         }
 
-        console.log(`❌ Chef disconnected: ${socket.id}`);
+        // Clean up socket → user mapping
+        if (userId && userToSocket[userId] === socket.id) {
+            delete userToSocket[userId];
+            console.log(`🔓 Cleared session for user: ${userId}`);
+        }
+        delete socketToUser[socket.id];
+        if (userId) {
+            delete userToSocket[userId];
+            broadcastStatusUpdate(userId);
+            console.log(`[Status] Broadcasted offline for ${userId}`);
+        }
 
-        io.emit('roomList', buildRoomListPayload());
+        console.log(`❌ Chef disconnected: ${socket.id}`);
+        broadcastRoomList();
     });
 
     // Toggle Ready Status (non-host players only)
@@ -1286,16 +2067,206 @@ io.on('connection', (socket) => {
         console.log(`✅ Player ${player.name} is ${player.isReady ? 'ready' : 'not ready'}`);
     });
 
-    // ============ NEW FEATURE HANDLERS ============
+    socket.on('getUserProfile', () => {
+        const userId = socketToUser[socket.id];
+        if (!userId || !users[userId]) {
+            socket.emit('userProfile', null);
+            return;
+        }
+
+        const user = users[userId];
+        const stats = user.stats;
+
+        // Calculate additional computed stats
+        const totalAchievements = stats.achievements.length;
+        const averageScore = stats.gamesPlayed > 0 ? Math.round(stats.scoreTotal / stats.gamesPlayed) : 0;
+        const averageDishes = stats.gamesPlayed > 0 ? Math.round(stats.dishesServed / stats.gamesPlayed) : 0;
+
+        // Group achievements by type
+        const achievementGroups = {
+            score: stats.achievements.filter(a => a.id.includes('score_')).length,
+            dishes: stats.achievements.filter(a => a.id.includes('dishes_')).length,
+            special: stats.achievements.filter(a => !a.id.includes('score_') && !a.id.includes('dishes_') && !a.id.includes('games_')).length,
+            veteran: stats.achievements.filter(a => a.id.includes('games_')).length
+        };
+
+        // Recent games (last 10)
+        const recentGames = stats.gameScores.slice(-10).reverse();
+
+        const profile = {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            type: user.type,
+            profileImage: user.profileImage,
+            profileColor: user.profileColor,
+            title: user.title,
+            bio: user.bio,
+            createdAt: user.createdAt,
+            stats: {
+                ...stats,
+                // Computed fields
+                averageScore,
+                averageDishes,
+                totalAchievements,
+                achievementGroups,
+                recentGames
+            },
+            friends: user.friends || []
+        };
+
+        socket.emit('userProfile', profile);
+    });
+
+    socket.on('getPlayerProfile', (data) => {
+        const { playerId } = data;
+        const requestingUserId = socketToUser[socket.id];
+
+        if (!requestingUserId || !users[requestingUserId]) {
+            socket.emit('playerProfile', null);
+            return;
+        }
+
+        if (!playerId || !users[playerId]) {
+            socket.emit('playerProfile', null);
+            return;
+        }
+
+        const user = users[playerId];
+        const stats = user.stats;
+
+        // Calculate additional computed stats
+        const totalAchievements = stats.achievements.length;
+        const averageScore = stats.gamesPlayed > 0 ? Math.round(stats.scoreTotal / stats.gamesPlayed) : 0;
+        const averageDishes = stats.gamesPlayed > 0 ? Math.round(stats.dishesServed / stats.gamesPlayed) : 0;
+
+        // Group achievements by type
+        const achievementGroups = {
+            score: stats.achievements.filter(a => a.id.includes('score_')).length,
+            dishes: stats.achievements.filter(a => a.id.includes('dishes_')).length,
+            special: stats.achievements.filter(a => !a.id.includes('score_') && !a.id.includes('dishes_') && !a.id.includes('games_')).length,
+            veteran: stats.achievements.filter(a => a.id.includes('games_')).length
+        };
+
+        // Recent games (last 5 for public view)
+        const recentGames = stats.gameScores.slice(-5).reverse();
+
+        const profile = {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            type: user.type,
+            profileImage: user.profileImage,
+            profileColor: user.profileColor,
+            title: user.title,
+            bio: user.bio,
+            createdAt: user.createdAt,
+            stats: {
+                gamesPlayed: stats.gamesPlayed,
+                scoreTotal: stats.scoreTotal,
+                dishesServed: stats.dishesServed,
+                chefHatPoints: stats.chefHatPoints,
+                achievements: stats.achievements, // Show achievements publicly
+                // Computed fields
+                averageScore,
+                averageDishes,
+                totalAchievements,
+                achievementGroups,
+                recentGames
+            },
+            friends: user.friends ? user.friends.length : 0, // Show friend count only
+            isFriend: user.friends && user.friends.includes(requestingUserId)
+        };
+
+        socket.emit('playerProfile', profile);
+    });
+
+    socket.on('getLeaderboard', (data) => {
+        const { type = 'score', limit = 10 } = data;
+
+        // Get all registered users (accounts only)
+        const allUsers = Object.values(users).filter(u => u.type === 'account');
+
+        let leaderboard = [];
+
+        if (type === 'score') {
+            leaderboard = allUsers
+                .map(user => ({
+                    id: user.id,
+                    username: user.username,
+                    name: user.name,
+                    profileImage: user.profileImage,
+                    profileColor: user.profileColor,
+                    title: user.title,
+                    value: user.stats.scoreTotal,
+                    games: user.stats.gamesPlayed,
+                    average: user.stats.gamesPlayed > 0 ? Math.round(user.stats.scoreTotal / user.stats.gamesPlayed) : 0
+                }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, limit);
+        } else if (type === 'dishes') {
+            leaderboard = allUsers
+                .map(user => ({
+                    id: user.id,
+                    username: user.username,
+                    name: user.name,
+                    profileImage: user.profileImage,
+                    profileColor: user.profileColor,
+                    title: user.title,
+                    value: user.stats.dishesServed,
+                    games: user.stats.gamesPlayed,
+                    average: user.stats.gamesPlayed > 0 ? Math.round(user.stats.dishesServed / user.stats.gamesPlayed) : 0
+                }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, limit);
+        } else if (type === 'achievements') {
+            leaderboard = allUsers
+                .map(user => ({
+                    id: user.id,
+                    username: user.username,
+                    name: user.name,
+                    profileImage: user.profileImage,
+                    profileColor: user.profileColor,
+                    title: user.title,
+                    value: user.stats.achievements.length,
+                    games: user.stats.gamesPlayed
+                }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, limit);
+        } else if (type === 'chefHatPoints') {
+            leaderboard = allUsers
+                .map(user => ({
+                    id: user.id,
+                    username: user.username,
+                    name: user.name,
+                    profileImage: user.profileImage,
+                    profileColor: user.profileColor,
+                    title: user.title,
+                    value: user.stats.chefHatPoints,
+                    games: user.stats.gamesPlayed
+                }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, limit);
+        }
+
+        socket.emit('leaderboard', {
+            type,
+            limit,
+            leaderboard,
+            totalPlayers: allUsers.length
+        });
+    });
+
+    // ============ NEW FEATURE HANDLERS ===========
 
     // Create Room (with password/description)
     socket.on('createRoom', (data) => {
+        const userId = socketToUser[socket.id];
         const roomId = data.roomName || `room_${Date.now()}`;
         const settings = {
             mode: data.mode || 'multi_coop',
             difficulty: data.difficulty || 'easy',
-            password: data.password,
-            description: data.description
+            password: data.password
         };
 
         // Check if room already exists
@@ -1345,6 +2316,9 @@ io.on('connection', (socket) => {
 
         const player = {
             id: socket.id,
+            userId: userId,
+            userType: users[userId] ? users[userId].type : 'guest',
+            username: users[userId] ? users[userId].username : null,
             name: data.name || `Chef_${socket.id.slice(0, 4)}`,
             roomId: roomId,
             gridX: spawn.x,
@@ -1356,7 +2330,11 @@ io.on('connection', (socket) => {
             facing: 'down',
             holding: null,
             color: playerColors[colorIdx],
-            emoji: '👨‍🍳',
+            emoji: playerEmojis[colorIdx],
+            profileImage: users[userId] ? users[userId].profileImage : 'chef_1',
+            profileColor: users[userId] ? users[userId].profileColor : '#FF6B6B',
+            title: users[userId] ? users[userId].title : '',
+            bio: users[userId] ? users[userId].bio : '',
             isChopping: false,
             chopStationId: null,
             score: 0,
@@ -1382,6 +2360,7 @@ io.on('connection', (socket) => {
                 timeLeft: room.timeLeft,
                 state: room.state,
                 mode: room.mode,
+                difficulty: room.difficulty,
             },
             config: {
                 TILE_SIZE: room.config.TILE_SIZE,
@@ -1397,7 +2376,8 @@ io.on('connection', (socket) => {
 
         console.log(`👨‍🍳 ${player.name} created and joined room ${roomId} (${Object.keys(room.players).length} players)`);
 
-        io.emit('roomList', buildRoomListPayload());
+        broadcastRoomList();
+        if (userId) broadcastStatusUpdate(userId);
     });
 
     // Join by Room Code
@@ -1429,32 +2409,254 @@ io.on('connection', (socket) => {
         socket.emit('pong');
     });
 
-    // Friends System
-    if (!friends[socket.id]) {
-        friends[socket.id] = [];
-    }
-
+    // Friends System - Enhanced with proper user tracking
     socket.on('getFriends', () => {
-        socket.emit('friendList', friends[socket.id] || []);
-    });
+        const userId = socketToUser[socket.id];
+        if (!userId) {
+            socket.emit('friendList', []);
+            return;
+        }
 
-    socket.on('addFriend', (data) => {
-        const friendName = data.name;
-        // Find friend by name or ID
-        // For now, just add to list
-        if (!friends[socket.id]) friends[socket.id] = [];
-        const friendExists = friends[socket.id].some(f => f.name === friendName);
-        if (!friendExists) {
-            friends[socket.id].push({ id: `friend_${Date.now()}`, name: friendName, status: 'offline' });
-            socket.emit('friendAdded', { name: friendName });
-            socket.emit('friendList', friends[socket.id]);
+        const currentUser = users[userId];
+        if (!currentUser || currentUser.type !== 'account') {
+            socket.emit('friendList', []);
+            return;
+        }
+
+        // Get user's friends from database
+        if (currentUser.friends) {
+            const friendsList = currentUser.friends.map(friendId => {
+                const friendUser = users[friendId];
+                if (!friendUser) return null;
+
+                // Check detailed status
+                const status = getUserStatus(friendId);
+
+                return {
+                    id: friendId,
+                    name: friendUser.username || friendUser.name,
+                    status: status
+                };
+            }).filter(f => f !== null);
+
+            socket.emit('friendList', friendsList);
+        } else {
+            socket.emit('friendList', []);
+        }
+
+        // Also send pending friend requests
+        if (currentUser.friendRequests) {
+            socket.emit('friendRequests', currentUser.friendRequests || []);
         }
     });
 
-    socket.on('inviteFriend', (data) => {
-        // Send invitation to friend
-        // Would need friend socket mapping
-        socket.emit('notification', { msg: 'Invitation sent!', type: 'success' });
+    socket.on('addFriend', async (data) => {
+        const currentUserId = socketToUser[socket.id];
+        if (!currentUserId) {
+            socket.emit('friendError', { message: 'You must be logged in to add friends!' });
+            return;
+        }
+
+        const currentUser = users[currentUserId];
+
+        if (!currentUser || currentUser.type !== 'account') {
+            socket.emit('friendError', { message: 'Only registered accounts can add friends!' });
+            return;
+        }
+
+        const friendName = data.name.trim();
+
+        // Find the friend user by username
+        const friendUserId = Object.keys(users).find(uid =>
+            users[uid].username && users[uid].username.toLowerCase() === friendName.toLowerCase()
+        );
+
+        if (!friendUserId) {
+            socket.emit('friendError', { message: `User "${friendName}" not found!` });
+            return;
+        }
+
+        const friendUser = users[friendUserId];
+
+        if (friendUser.type !== 'account') {
+            socket.emit('friendError', { message: 'Cannot add guest accounts as friends!' });
+            return;
+        }
+
+        if (friendUserId === currentUserId) {
+            socket.emit('friendError', { message: 'You cannot add yourself as a friend!' });
+            return;
+        }
+
+        // Initialize friends arrays if they don't exist
+        if (!currentUser.friends) currentUser.friends = [];
+        if (!friendUser.friendRequests) friendUser.friendRequests = [];
+
+        // Check if already friends
+        if (currentUser.friends.includes(friendUserId)) {
+            socket.emit('friendError', { message: `You are already friends with ${friendUser.username}!` });
+            return;
+        }
+
+        // Check if request already sent
+        if (friendUser.friendRequests.some(req => req.from === currentUserId)) {
+            socket.emit('friendError', { message: 'Friend request already sent!' });
+            return;
+        }
+
+        // Add friend request to target user
+        friendUser.friendRequests.push({
+            from: currentUserId,
+            fromName: currentUser.username,
+            timestamp: Date.now()
+        });
+
+        // Save to database
+        await persistUser(friendUserId);
+
+        socket.emit('friendAdded', {
+            success: true,
+            name: friendUser.username,
+            message: `Friend request sent to ${friendUser.username}!`
+        });
+
+        // Notify the friend if they're online
+        const friendSocketId = Object.keys(socketToUser).find(sid => socketToUser[sid] === friendUserId);
+
+        if (friendSocketId) {
+            const friendSocket = io.sockets.sockets.get(friendSocketId);
+            if (friendSocket) {
+                friendSocket.emit('friendRequestReceived', {
+                    from: currentUserId,
+                    fromName: currentUser.username,
+                    message: `${currentUser.username} sent you a friend request!`
+                });
+            }
+        }
+    });
+
+    socket.on('acceptFriendRequest', async (data) => {
+        const currentUserId = socketToUser[socket.id];
+        if (!currentUserId) return;
+
+        const currentUser = users[currentUserId];
+        const requesterId = data.from;
+        const requester = users[requesterId];
+
+        if (!currentUser || !requester) return;
+
+        // Initialize friends arrays
+        if (!currentUser.friends) currentUser.friends = [];
+        if (!requester.friends) requester.friends = [];
+        if (!currentUser.friendRequests) currentUser.friendRequests = [];
+
+        // Remove the request
+        currentUser.friendRequests = currentUser.friendRequests.filter(req => req.from !== requesterId);
+
+        // Add to both friends lists
+        if (!currentUser.friends.includes(requesterId)) {
+            currentUser.friends.push(requesterId);
+        }
+        if (!requester.friends.includes(currentUserId)) {
+            requester.friends.push(currentUserId);
+        }
+
+        // Save both users
+        await persistUser(currentUserId);
+        await persistUser(requesterId);
+
+        socket.emit('friendRequestAccepted', {
+            name: requester.username,
+            message: `You are now friends with ${requester.username}!`
+        });
+
+        // Refresh friends list
+        socket.emit('getFriends');
+
+        // Notify the requester if online
+        const requesterSocketId = Object.keys(socketToUser).find(sid => socketToUser[sid] === requesterId);
+
+        if (requesterSocketId) {
+            const requesterSocket = io.sockets.sockets.get(requesterSocketId);
+            if (requesterSocket) {
+                requesterSocket.emit('friendRequestAccepted', {
+                    name: currentUser.username,
+                    message: `${currentUser.username} accepted your friend request!`
+                });
+                requesterSocket.emit('getFriends');
+            }
+        }
+    });
+
+    socket.on('rejectFriendRequest', async (data) => {
+        const currentUserId = socketToUser[socket.id];
+        if (!currentUserId) return;
+
+        const currentUser = users[currentUserId];
+
+        if (!currentUser || !currentUser.friendRequests) return;
+
+        // Remove the request
+        currentUser.friendRequests = currentUser.friendRequests.filter(req => req.from !== data.from);
+        await persistUser(currentUserId);
+
+        socket.emit('friendRequestRejected', { message: 'Friend request rejected' });
+    });
+
+
+    socket.on('inviteFriendToRoom', (data) => {
+        const currentUserId = socketToUser[socket.id];
+        console.log('Invite request from userId:', currentUserId);
+
+        if (!currentUserId) {
+            console.log('No userId found for socket:', socket.id);
+            return;
+        }
+
+        const currentUser = users[currentUserId];
+        if (!currentUser) {
+            console.log('No user found for userId:', currentUserId);
+            return;
+        }
+
+        const friendId = data.friendId;
+        const roomCode = data.roomCode;
+        const roomName = data.roomName;
+
+        console.log('Inviting friend:', friendId, 'to room:', roomName, 'code:', roomCode);
+
+        // Find friend's socket
+        const friendSocketId = userToSocket[friendId];
+        console.log('Friend socket ID:', friendSocketId);
+
+        if (friendSocketId) {
+            // Check if friend is in a room and in-game
+            const player = findPlayer(friendSocketId);
+            if (player) {
+                const room = rooms[player.roomId];
+                if (room && room.state !== 'lobby') {
+                    socket.emit('notification', { msg: 'This friend is currently in a game!', type: 'error' });
+                    return;
+                }
+            }
+
+            const friendSocket = io.sockets.sockets.get(friendSocketId);
+            if (friendSocket) {
+                const inviteData = {
+                    from: currentUserId,
+                    fromName: currentUser.username || currentUser.name,
+                    roomCode: roomCode,
+                    roomName: roomName
+                };
+                console.log('Sending invitation to friend:', inviteData);
+                friendSocket.emit('roomInvitation', inviteData);
+                console.log(`📨 ${currentUser.username} invited friend to room ${roomName}`);
+            } else {
+                console.log('Friend socket not found in io.sockets');
+            }
+        } else {
+            console.log('Friend is not online (no socket found)');
+        }
     });
 
     // Kick Player (host only)
@@ -1518,9 +2720,32 @@ function handleInteraction(player, station, room) {
         case 'sink':
             handleSink(player, station, room);
             break;
+        case 'seasoning':
+            handleSeasoning(player, station, room);
+            break;
     }
 
     emitGameState(room);
+}
+
+function handleSeasoning(player, station, room) {
+    if (player.holding && !station.contents) {
+        // Normal drop logic
+        station.contents = player.holding;
+        player.holding = null;
+    } else if (!player.holding && station.contents) {
+        // Normal pickup logic
+        player.holding = station.contents;
+        station.contents = null;
+    } else if (player.holding && station.contents) {
+        // Normal combine logic (e.g., adding to plate on seasoning station)
+        const combined = tryCombine(player.holding, station.contents, room);
+        if (combined) {
+            station.contents = combined;
+            player.holding = null;
+        }
+    }
+    emitPlayerUpdate(player, room);
 }
 
 function handleCrate(player, station, room) {
@@ -1568,7 +2793,7 @@ function handleCounter(player, station, room) {
                     const plateIngredients = station.contents.ingredients || [];
                     const isBurger = plateIngredients.includes('bread') && player.holding.name === 'meat';
                     const isFishTacos = plateIngredients.includes('bread') && player.holding.name === 'fish';
-                    
+
                     if (isBurger || isFishTacos || plateIngredients.length === 0) {
                         io.to(room.id).emit('notification', { msg: `🔥 Cook the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                     } else {
@@ -1600,14 +2825,12 @@ function handleChopping(player, station, room) {
                     station.chopProgress = player.holding.chopProgress;
                 }
                 player.holding = null;
-                
+
                 // Emit station update to show progress bar immediately
                 io.to(room.id).emit('stationUpdate', {
                     stationId: station.id,
                     station: sanitizeStation(station),
                 });
-            } else if (ing && ing.chopTime === 0) {
-                io.to(room.id).emit('notification', { msg: `${ing.emoji} ${ing.name} doesn't need chopping!`, type: 'error' });
             } else if (player.holding.chopped) {
                 io.to(room.id).emit('notification', { msg: 'Already chopped!', type: 'info' });
             }
@@ -1651,9 +2874,8 @@ function handleStove(player, station, room) {
         if (player.holding.type === 'ingredient') {
             const name = player.holding.name;
             const ing = room.activeIngredients[name];
-            
+
             if (name === 'bread') {
-                io.to(room.id).emit('notification', { msg: '🍞 Bread doesn\'t need cooking!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
@@ -1663,12 +2885,10 @@ function handleStove(player, station, room) {
                 return;
             }
             if (name === 'lettuce') {
-                io.to(room.id).emit('notification', { msg: '🥬 Lettuce doesn\'t need cooking!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
             if (name === 'cheese') {
-                io.to(room.id).emit('notification', { msg: '🧀 Cheese doesn\'t need cooking!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
@@ -1677,19 +2897,19 @@ function handleStove(player, station, room) {
                 emitPlayerUpdate(player, room);
                 return;
             }
-            
+
             if (name === 'rice' && !player.holding.washed) {
                 io.to(room.id).emit('notification', { msg: '🍚 Wash the rice at the Sink first!', type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
-            
+
             if (ing && ing.chopTime > 0 && !player.holding.chopped) {
                 io.to(room.id).emit('notification', { msg: `✂️ Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
-            
+
             station.contents = player.holding;
             station.cookProgress = 0;
             station.isBurning = false;
@@ -1747,14 +2967,14 @@ function handleOven(player, station, room) {
                 emitPlayerUpdate(player, room);
                 return;
             }
-            
-            const tomatoChopped = !player.holding.ingredients.includes('tomato') || 
-                                 (player.holding.chopped && player.holding.chopped.includes('tomato'));
-            const cheeseChopped = !player.holding.ingredients.includes('cheese') || 
-                                 (player.holding.chopped && player.holding.chopped.includes('cheese'));
+
+            const tomatoChopped = !player.holding.ingredients.includes('tomato') ||
+                (player.holding.chopped && player.holding.chopped.includes('tomato'));
+            const cheeseChopped = !player.holding.ingredients.includes('cheese') ||
+                (player.holding.chopped && player.holding.chopped.includes('cheese'));
             const hasTomato = player.holding.ingredients.includes('tomato');
             const hasCheese = player.holding.ingredients.includes('cheese');
-            
+
             if (!tomatoChopped) {
                 io.to(room.id).emit('notification', { msg: '🍅 Chop the tomato first!', type: 'error' });
                 emitPlayerUpdate(player, room);
@@ -1770,7 +2990,7 @@ function handleOven(player, station, room) {
                 emitPlayerUpdate(player, room);
                 return;
             }
-            
+
             station.contents = player.holding;
             station.cookProgress = 0;
             station.isBurning = false;
@@ -1806,7 +3026,7 @@ function handleRoller(player, station, room) {
                     station.rollProgress = player.holding.rollProgress;
                 }
                 player.holding = null;
-                
+
                 // Emit station update to show progress bar immediately
                 io.to(room.id).emit('stationUpdate', {
                     stationId: station.id,
@@ -1849,19 +3069,11 @@ function handleServe(player, station, room) {
             const timeBonus = matchedOrder.expiresAt - Date.now() > ORDER_TIMEOUT * 0.5
                 ? matchedOrder.tip : 0;
 
-            // --- NEW: FRESHNESS BONUS ---
-            let freshnessBonus = 0;
-            if (plate.platedAt) {
-                const age = (Date.now() - plate.platedAt) / 1000; // seconds
-                if (age < 15) freshnessBonus = 10;
-                else if (age < 30) freshnessBonus = 5;
-            }
-
             // --- NEW: SEASONING BONUS ---
             const seasoningBonus = plate.seasoning ? 8 : 0;
 
             const basePoints = evaluation.effectiveBasePoints;
-            const totalPoints = basePoints + (comboMultiplier - 1) * 5 + timeBonus + freshnessBonus + seasoningBonus;
+            const totalPoints = basePoints + (comboMultiplier - 1) * 5 + timeBonus + seasoningBonus;
 
             // Score handling: Co-op = shared score, VS = individual scores
             if (room.mode === 'multi_coop') {
@@ -1908,42 +3120,40 @@ function handleServe(player, station, room) {
             });
 
             let msg = `${room.activeRecipes[recipeKey].emoji} ${room.activeRecipes[recipeKey].name} served! +${totalPoints} pts`;
-            if (processPenalty > 0) msg += ` (-${processPenalty} process)`;
-            if (freshnessBonus > 0) msg += ` (✨ Freshness +${freshnessBonus})`;
-            if (seasoningBonus > 0) msg += ` (🧂 Seasoned +${seasoningBonus})`;
 
             io.to(room.id).emit('notification', {
                 msg: msg,
                 type: 'success',
+                playerId: player.id,
+                playerName: player.name
             });
         } else {
             room.combo = 0;
-            // Wrong dish penalty: Co-op = shared penalty, VS = individual penalty
-            if (room.mode === 'multi_coop') {
-                room.score = Math.max(0, room.score - 3);
-            } else if (room.mode === 'multi_vs') {
-                player.score = Math.max(0, player.score - 3);
-                room.score = Object.values(room.players).reduce((sum, p) => sum + p.score, 0);
-            } else {
-                room.score = Math.max(0, room.score - 3);
-            }
-            player.holding = null;
-            io.to(room.id).emit('notification', { msg: '❌ Wrong dish!', type: 'error' });
-        }
-    }
-    emitPlayerUpdate(player, room);
-}
+            const penaltyPoints = plate.burnt ? 10 : 5;
+            const penaltyReason = plate.burnt ? 'Burnt dish!' : 'Wrong recipe!';
 
-function handleSeasoning(player, station, room) {
-    if (player.holding && player.holding.type === 'plate') {
-        if (!player.holding.seasoning) {
-            player.holding.seasoning = station.ingredient; // 'salt' or 'sauce'
-            io.to(room.id).emit('notification', { msg: `✨ Added ${station.ingredient}!`, type: 'success' });
-        } else {
-            io.to(room.id).emit('notification', { msg: 'Already seasoned!', type: 'info' });
+            if (room.mode === 'multi_coop') {
+                room.score = Math.max(0, room.score - penaltyPoints);
+                player.score = Math.max(0, player.score - penaltyPoints);
+            } else if (room.mode === 'multi_vs') {
+                player.score = Math.max(0, player.score - penaltyPoints);
+                room.score = Object.values(room.players).reduce((sum, p) => sum + p.score, 0);
+                const vsScores = {};
+                Object.values(room.players).forEach(p => { vsScores[p.id] = p.score; });
+                io.to(room.id).emit('scoreUpdate', { scores: vsScores });
+            } else {
+                room.score = Math.max(0, room.score - penaltyPoints);
+                player.score = Math.max(0, player.score - penaltyPoints);
+            }
+
+            player.holding = null;
+            io.to(room.id).emit('notification', {
+                msg: `❌ ${penaltyReason} -${penaltyPoints} pts`,
+                type: 'error',
+                playerId: player.id,
+                playerName: player.name
+            });
         }
-    } else {
-        io.to(room.id).emit('notification', { msg: 'Hold a plate to season!', type: 'info' });
     }
     emitPlayerUpdate(player, room);
 }
@@ -1954,6 +3164,8 @@ function handleTrash(player, station, room) {
         io.to(room.id).emit('notification', {
             msg: '🗑️ Item trashed',
             type: 'info',
+            playerId: player.id,
+            playerName: player.name
         });
     }
     emitPlayerUpdate(player, room);
@@ -1988,13 +3200,13 @@ function handleSink(player, station, room) {
                     station.washProgress = player.holding.washProgress;
                 }
                 player.holding = null;
-                
+
                 // Emit station update to show progress bar immediately
                 io.to(room.id).emit('stationUpdate', {
                     stationId: station.id,
                     station: sanitizeStation(station),
                 });
-                
+
                 io.to(room.id).emit('notification', {
                     msg: '🚰 Washing rice... Hold Space!',
                     type: 'info',
@@ -2023,11 +3235,6 @@ function handleSink(player, station, room) {
             msg: '🧼 Plate cleaned!',
             type: 'info',
         });
-    } else if (player.holding && player.holding.type === 'ingredient' && player.holding.name !== 'rice') {
-        io.to(room.id).emit('notification', {
-            msg: '🚰 Only rice needs washing!',
-            type: 'error',
-        });
     }
     emitPlayerUpdate(player, room);
 }
@@ -2037,32 +3244,32 @@ function tryCombine(itemA, itemB, room) {
     if (itemA.type === 'ingredient' && itemB.type === 'plate') {
         const ingName = itemA.name;
         const ing = room ? room.activeIngredients[ingName] : INGREDIENTS[ingName];
-        
+
         if (ingName === 'dough' && !itemA.rolled) {
             return null;
         }
-        
+
         if (ingName === 'rice' && !itemA.washed) {
             return null;
         }
-        
+
         if (ing && ing.chopTime > 0 && !itemA.chopped) {
             return null;
         }
-        
+
         if (room && (ingName === 'meat' || ingName === 'fish')) {
             const plateIngredients = itemB.ingredients || [];
-            
+
             const isBurger = plateIngredients.includes('bread') && ingName === 'meat';
             const isFishTacos = plateIngredients.includes('bread') && ingName === 'fish';
-            
+
             if ((isBurger || isFishTacos) && !itemA.cooked) {
                 return null;
             }
-            
+
             if (plateIngredients.length === 0) {
                 let needsPreCooking = false;
-                
+
                 if (room.activeRecipes) {
                     if (room.activeRecipes.burger && ingName === 'meat') {
                         needsPreCooking = true;
@@ -2071,7 +3278,7 @@ function tryCombine(itemA, itemB, room) {
                         needsPreCooking = true;
                     }
                 }
-                
+
                 if (needsPreCooking && !itemA.cooked) {
                     return null;
                 }
@@ -2127,6 +3334,7 @@ function finalizeGameStart(room) {
     room.state = 'playing';
     room.timeLeft = GAME_DURATION;
     room.gameStartAt = Date.now();
+    room.gameSessionId = `${room.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Unique game session ID
     room.score = 0;
     room.combo = 0;
     room.maxCombo = 0;
@@ -2134,6 +3342,14 @@ function finalizeGameStart(room) {
     room.ordersCompleted = 0;
     room.ordersFailed = 0;
     room.perfectDishes = 0;
+
+    // Clear any old disconnected players from previous game sessions in this room
+    Object.keys(disconnectedPlayers).forEach(userId => {
+        if (disconnectedPlayers[userId].roomId === room.id) {
+            console.log(`🧹 Clearing old disconnected player ${userId} from previous game session`);
+            delete disconnectedPlayers[userId];
+        }
+    });
 
     Object.values(room.stations).forEach(s => {
         s.contents = null;
@@ -2157,6 +3373,12 @@ function finalizeGameStart(room) {
     io.to(room.id).emit('gameStarted', {
         timeLeft: room.timeLeft,
         orders: room.orders,
+    });
+
+    // Broadcast status update for all players in room
+    Object.keys(room.players).forEach(sid => {
+        const uid = socketToUser[sid];
+        if (uid) broadcastStatusUpdate(uid);
     });
 
     room.orderTimer = setInterval(() => {
@@ -2197,6 +3419,35 @@ function finalizeGameStart(room) {
 
 function tickGame(room) {
     checkOrderExpiry(room);
+
+    // --- RARE SEASONING SPAWN LOGIC (Timed Station Effect) ---
+    if (Math.random() < 0.008) { // Increased chance since it only lasts 5s
+        const seasoningStations = Object.values(room.stations).filter(s => s.type === 'seasoning' && !s.rareSeasoning);
+        if (seasoningStations.length > 0) {
+            const st = seasoningStations[Math.floor(Math.random() * seasoningStations.length)];
+            st.rareSeasoning = st.ingredient; // 'salt' or 'sauce'
+            st.rareSeasoningExpires = Date.now() + 5000; // 5 seconds duration
+
+            io.to(room.id).emit('stationUpdate', {
+                stationId: st.id,
+                station: sanitizeStation(st)
+            });
+            console.log(`✨ Rare Seasoning Active: ${st.ingredient} at ${st.id} (5s)`);
+        }
+    }
+
+    // --- RARE SEASONING EXPIRY CLEANUP ---
+    Object.values(room.stations).forEach(st => {
+        if (st.rareSeasoning && Date.now() > st.rareSeasoningExpires) {
+            st.rareSeasoning = null;
+            st.rareSeasoningExpires = null;
+            st.garnishProgress = 0; // Reset progress if it expired
+            io.to(room.id).emit('stationUpdate', {
+                stationId: st.id,
+                station: sanitizeStation(st)
+            });
+        }
+    });
 
     // Update stoves & ovens (cooking progress)
     Object.values(room.stations).forEach(station => {
@@ -2261,15 +3512,20 @@ function tickGame(room) {
                 station.isBurning = false;
                 station.cookedNotified = false;
 
-                // Fire penalty: Co-op = shared, VS = individual (find player who was using this station)
-                if (room.mode === 'multi_vs') {
-                    // In VS mode, try to find which player was using this station (if possible)
-                    // For now, apply penalty to room score (could be improved to track station usage)
-                    const penalty = 10;
-                    room.score = Math.max(0, room.score - penalty);
-                } else {
-                    // Co-op and single: shared penalty
-                    room.score = Math.max(0, room.score - 10);
+                const penaltyPoints = 10;
+                if (room.mode === 'multi_coop' || !room.mode) {
+                    room.score = Math.max(0, room.score - penaltyPoints);
+                    Object.values(room.players).forEach(p => {
+                        p.score = Math.max(0, p.score - penaltyPoints);
+                    });
+                } else if (room.mode === 'multi_vs') {
+                    Object.values(room.players).forEach(p => {
+                        p.score = Math.max(0, p.score - penaltyPoints);
+                    });
+                    room.score = Object.values(room.players).reduce((sum, p) => sum + p.score, 0);
+                    const vsScores = {};
+                    Object.values(room.players).forEach(p => { vsScores[p.id] = p.score; });
+                    io.to(room.id).emit('scoreUpdate', { scores: vsScores });
                 }
 
                 io.to(room.id).emit('fire', {
@@ -2277,8 +3533,11 @@ function tickGame(room) {
                     score: room.score,
                 });
                 io.to(room.id).emit('notification', {
-                    msg: '🔥 FIRE! Food destroyed! -10 pts',
+                    msg: `🔥 FIRE! Food destroyed! -${penaltyPoints} pts`,
                     type: 'error',
+                    // Note: Fire applies to the room/station, not a specific player acting right now,
+                    // but we can leave it as a general alert, or if we tracked who left it, blame them.
+                    // For now, general alert is fine.
                 });
             }
 
@@ -2292,6 +3551,7 @@ function tickGame(room) {
 
 function endGame(room) {
     room.state = 'gameover';
+    room.gameSessionId = null; // Clear game session ID when game ends
     clearTimers(room);
 
     if (room.score > room.highScore) {
@@ -2300,7 +3560,54 @@ function endGame(room) {
 
     const chefPoints = Math.floor(room.score / 10);
 
+    // Update user stats for all players who are registered users
+    Object.values(room.players).forEach(player => {
+        if (player.userId && users[player.userId] && users[player.userId].type === 'account') {
+            const user = users[player.userId];
+            const stats = user.stats;
+
+            // Check for new achievements BEFORE updating stats
+            const newAchievements = checkAchievements(user, player, room);
+            if (newAchievements.length > 0) {
+                stats.achievements.push(...newAchievements);
+                console.log(`🏆 New achievements for ${user.username}: ${newAchievements.map(a => a.name).join(', ')}`);
+            }
+
+            // Increment games played
+            stats.gamesPlayed += 1;
+
+            // Add score to total
+            stats.scoreTotal += player.score || 0;
+
+            // Add dishes served to total
+            stats.dishesServed += player.dishesServed || 0;
+
+            // Add game score to history
+            stats.gameScores.push({
+                score: player.score || 0,
+                dishesServed: player.dishesServed || 0,
+                perfectDishes: player.perfectDishes || 0,
+                date: Date.now()
+            });
+
+            // Keep only last 50 games
+            if (stats.gameScores.length > 50) {
+                stats.gameScores = stats.gameScores.slice(-50);
+            }
+
+            // Calculate chef hat points: 3 per dish + bonus based on performance
+            const dishPoints = (player.dishesServed || 0) * 3;
+            const performanceBonus = Math.floor((player.score || 0) / 50); // 1 bonus point per 50 score
+            const newChefPoints = dishPoints + performanceBonus;
+            stats.chefHatPoints += newChefPoints;
+
+            // Persist user data
+            persistUser(player.userId);
+        }
+    });
+
     io.to(room.id).emit('gameOver', {
+        mode: room.mode,
         score: room.score,
         highScore: room.highScore,
         ordersCompleted: room.ordersCompleted,
@@ -2308,13 +3615,20 @@ function endGame(room) {
         maxCombo: room.maxCombo,
         chefPoints,
         players: Object.values(room.players).map(p => ({
+            id: p.id,
             name: p.name,
-            score: p.score,
-            dishesServed: p.dishesServed,
+            score: p.score || 0,
+            dishesServed: p.dishesServed || 0,
             perfectDishes: p.perfectDishes || 0,
             chefPoints: Math.floor((p.score || 0) / 10),
             color: p.color,
         })),
+    });
+
+    // Broadcast status update for all players in room (back to lobby/gameover)
+    Object.keys(room.players).forEach(sid => {
+        const uid = socketToUser[sid];
+        if (uid) broadcastStatusUpdate(uid);
     });
 }
 
@@ -2324,6 +3638,7 @@ function restartGame(room) {
     room.orders = [];
     room.score = 0;
     room.timeLeft = GAME_DURATION;
+    room.gameSessionId = null; // Clear game session ID when returning to lobby
 
     // Reset stations
     Object.values(room.stations).forEach(s => {
@@ -2350,6 +3665,12 @@ function restartGame(room) {
             timeLeft: GAME_DURATION,
             state: 'lobby',
         }
+    });
+
+    // Broadcast status update for all players in room (back to lobby)
+    Object.keys(room.players).forEach(sid => {
+        const uid = socketToUser[sid];
+        if (uid) broadcastStatusUpdate(uid);
     });
 
     // Auto-start single player games immediately on restart
@@ -2392,6 +3713,7 @@ function sanitizeStation(station) {
         chopProgress: station.chopProgress,
         rollProgress: station.rollProgress,
         washProgress: station.washProgress,
+        garnishProgress: station.garnishProgress,
         isBurning: station.isBurning,
         isDirty: station.isDirty,
         ingredient: station.ingredient,

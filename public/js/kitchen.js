@@ -30,6 +30,9 @@ export class KitchenRenderer {
         this.layout = null; // Store layout for auto-rotation
         this.environmentGroup = new THREE.Group();
         this.scene.add(this.environmentGroup);
+
+        // Light following properties
+        this.playerGlowLight = null;
     }
 
     clear() {
@@ -47,6 +50,9 @@ export class KitchenRenderer {
         this.clear(); // Ensure clean slate
         this.layout = layout; // Store for auto-rotation
 
+        // Random theme selection
+        const theme = Math.random() < 0.5 ? 'rustic' : 'midnight';
+
         // Floating Floor Base (Thick Box)
         const totalW = this.config.GRID_W * this.ts;
         const totalH = this.config.GRID_H * this.ts;
@@ -54,8 +60,9 @@ export class KitchenRenderer {
 
         // --- PURPLE FLOOR (TO PROVE UPDATE IS LIVE) ---
         const baseGeo = new THREE.BoxGeometry(totalW + 2.5, thickness, totalH + 2.5);
+        const baseColor = theme === 'rustic' ? 0xa0522d : 0x2c3e50;
         const baseMat = new THREE.MeshStandardMaterial({
-            color: 0x8e44ad, roughness: 0.1, metalness: 0.2
+            color: baseColor, roughness: 0.1, metalness: 0.2
         });
         const base = new THREE.Mesh(baseGeo, baseMat);
         base.position.set(totalW / 2 - this.ts / 2, -thickness / 2 - 0.05, totalH / 2 - this.ts / 2);
@@ -63,9 +70,10 @@ export class KitchenRenderer {
         this.environmentGroup.add(base);
 
         // Sub-tiles for gloss
-        const shinyFloorGeo = new THREE.PlaneGeometry(totalW + 2, totalH + 2);
+        const shinyFloorGeo = new THREE.PlaneGeometry(totalW + 2, totalH + 3);
+        const floorColor = theme === 'rustic' ? 0x8b4513 : 0x34495e;
         const shinyFloorMat = new THREE.MeshStandardMaterial({
-            color: 0x2c3e50, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.3
+            color: floorColor, roughness: 0.0, metalness: 1.0, transparent: true, opacity: 0.2
         });
         const shinyFloor = new THREE.Mesh(shinyFloorGeo, shinyFloorMat);
         shinyFloor.rotation.x = -Math.PI / 2;
@@ -74,40 +82,96 @@ export class KitchenRenderer {
 
         // Walls
         const wallHeight = 2.5;
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.3 }); // Nicer blue
+        const wallColor = theme === 'rustic' ? 0xfafafa : 0x2980b9;
+        const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 0.05, metalness: 0.1 }); // Off-white or midnight blue
 
         // Back Wall
-        const backGeo = new THREE.BoxGeometry(totalW + 2, wallHeight, 1);
+        const backGeo = new THREE.BoxGeometry(totalW + 2, wallHeight, 0.5);
         const backWall = new THREE.Mesh(backGeo, wallMat);
-        backWall.position.set(totalW / 2 - this.ts / 2, wallHeight / 2, -this.ts / 2 - 1.5);
+        backWall.position.set(totalW / 2 - this.ts / 2, wallHeight / 2, -this.ts / 2 - 1);
         backWall.receiveShadow = true;
         backWall.castShadow = true;
         this.environmentGroup.add(backWall);
 
         // Left Wall
-        const leftGeo = new THREE.BoxGeometry(1, wallHeight, totalH + 3);
+        const leftGeo = new THREE.BoxGeometry(0.4, wallHeight, totalH + 2.5);
         const leftWall = new THREE.Mesh(leftGeo, wallMat);
-        leftWall.position.set(-this.ts / 2 - 1.5, wallHeight / 2, totalH / 2 - this.ts / 2);
+        leftWall.position.set(-this.ts / 2 - 1 - 0.2, wallHeight / 2, totalH / 2 - this.ts / 2);
         leftWall.receiveShadow = true;
         leftWall.castShadow = true;
         this.environmentGroup.add(leftWall);
 
         // Right Wall
-        const rightGeo = new THREE.BoxGeometry(1, wallHeight, totalH + 3);
+        const rightGeo = new THREE.BoxGeometry(0.4, wallHeight, totalH + 2.5);
         const rightWall = new THREE.Mesh(rightGeo, wallMat);
-        rightWall.position.set(totalW - this.ts / 2 + 1.5, wallHeight / 2, totalH / 2 - this.ts / 2);
+        rightWall.position.set(totalW - this.ts / 2 + 1 + 0.2, wallHeight / 2, totalH / 2 - this.ts / 2);
         rightWall.receiveShadow = true;
         rightWall.castShadow = true;
         this.environmentGroup.add(rightWall);
+
+        // Wall Top Accents (Line Design)
+        const accentColor = theme === 'rustic' ? 0x8b4513 : 0x34495e;
+        const accentMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.05, metalness: 0.1 });
+        const accentHeight = 0.1;
+        const accentDepth = 0.6;
+
+        // Back wall accent
+        const backAccentGeo = new THREE.BoxGeometry(totalW + 2, accentHeight, accentDepth);
+        const backAccent = new THREE.Mesh(backAccentGeo, accentMat);
+        backAccent.position.set(totalW / 2 - this.ts / 2, wallHeight + accentHeight / 2, -this.ts / 2 - 1);
+        backAccent.receiveShadow = true;
+        backAccent.castShadow = true;
+        this.environmentGroup.add(backAccent);
+
+        // Left wall accent
+        const leftAccentGeo = new THREE.BoxGeometry(accentDepth, accentHeight, totalH + 2.5);
+        const leftAccent = new THREE.Mesh(leftAccentGeo, accentMat);
+        leftAccent.position.set(-this.ts / 2 - 1 - 0.2, wallHeight + accentHeight / 2, totalH / 2 - this.ts / 2);
+        leftAccent.receiveShadow = true;
+        leftAccent.castShadow = true;
+        this.environmentGroup.add(leftAccent);
+
+        // Right wall accent
+        const rightAccentGeo = new THREE.BoxGeometry(accentDepth, accentHeight, totalH + 2.5);
+        const rightAccent = new THREE.Mesh(rightAccentGeo, accentMat);
+        rightAccent.position.set(totalW - this.ts / 2 + 1 + 0.2, wallHeight + accentHeight / 2, totalH / 2 - this.ts / 2);
+        rightAccent.receiveShadow = true;
+        rightAccent.castShadow = true;
+        this.environmentGroup.add(rightAccent);
+
+
+        // Baseboard details for subtle polish
+        const baseboardMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.1, metalness: 0.2 });
+        const baseboardHeight = 0.05;
+
+        // Back baseboard
+        const backBaseGeo = new THREE.BoxGeometry(totalW + 2, baseboardHeight, 0.02);
+        const backBase = new THREE.Mesh(backBaseGeo, baseboardMat);
+        backBase.position.set(totalW / 2 - this.ts / 2, baseboardHeight / 2, -this.ts / 2 - 1 - 0.21);
+        this.environmentGroup.add(backBase);
+
+        // Left baseboard
+        const leftBaseGeo = new THREE.BoxGeometry(0.02, baseboardHeight, totalH + 2);
+        const leftBase = new THREE.Mesh(leftBaseGeo, baseboardMat);
+        leftBase.position.set(-this.ts / 2 - 1 - 0.21, baseboardHeight / 2, totalH / 2 - this.ts / 2);
+        this.environmentGroup.add(leftBase);
+
+        // Right baseboard
+        const rightBaseGeo = new THREE.BoxGeometry(0.02, baseboardHeight, totalH + 2);
+        const rightBase = new THREE.Mesh(rightBaseGeo, baseboardMat);
+        rightBase.position.set(totalW - this.ts / 2 + 1 + 0.21, baseboardHeight / 2, totalH / 2 - this.ts / 2);
+        this.environmentGroup.add(rightBase);
 
         // Tiles
         for (let z = 0; z < this.config.GRID_H; z++) {
             for (let x = 0; x < this.config.GRID_W; x++) {
                 if (layout[z] && layout[z][x] === 0) {
                     const tGeo = new THREE.PlaneGeometry(this.ts * 0.98, this.ts * 0.98);
-                    // Premium marble-ish pattern
+                    // Premium wood-like or dark pattern
                     const isEven = (x + z) % 2 === 0;
-                    const shade = isEven ? 0xecf0f1 : 0xbdc3c7;
+                    const shade = theme === 'rustic' 
+                        ? (isEven ? 0xd2b48c : 0x8b4513) 
+                        : (isEven ? 0x34495e : 0x2c3e50);
                     const tMat = new THREE.MeshStandardMaterial({
                         color: shade,
                         roughness: 0.05,
@@ -124,6 +188,10 @@ export class KitchenRenderer {
 
         // Build stations
         Object.values(stations).forEach(st => this.buildStation(st));
+
+        // Add dim ambient light for subtle darkness
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        this.scene.add(ambientLight);
     }
 
     buildStation(st) {
@@ -136,11 +204,12 @@ export class KitchenRenderer {
             chopping: 0xd4a373,   // Wood Light
             stove: 0x2d3436,      // Dark Charcoal
             serve: 0x4a5568,      // Gray-Blue (Matching counters)
-            trash: 0xe74c3c,      // Red (Theme Danger)
+            trash: 0x228B22,      // Green (Nature Theme)
             plates: 0xfbfbfb,     // White
             sink: 0x3498db,       // Blue
             oven: 0x7f8c8d,       // Stone Gray
-            roller: 0xd4a373      // Wood
+            roller: 0xd4a373,     // Wood
+            seasoning: 0x34495e   // Charcoal Blue
         };
         const c = colors[st.type] || 0x7f8c8d;
 
@@ -178,7 +247,7 @@ export class KitchenRenderer {
             // NEW CHEST FREEZER - CLEAN IMPLEMENTATION
             // ======================================
             const freezer = new THREE.Group();
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.2, metalness: 0.8 });
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xB0B0B0, roughness: 0.15, metalness: 0.9 });
             const fridgeH = baseH * 0.95;
             const sz = this.ts * 0.46;
             const th = 0.04;
@@ -197,11 +266,7 @@ export class KitchenRenderer {
             freezer.add(createWall(th, fridgeH, sz * 1.8, sz - th / 2, fridgeH / 2, 0)); // right
             freezer.add(createWall(sz * 2, th, sz * 1.8, 0, th / 2, 0)); // bottom only
 
-            // Dark gasket rim
-            const gasketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2 });
-            const gasket = new THREE.Mesh(new THREE.BoxGeometry(sz * 2.02, 0.05, sz * 1.82), gasketMat);
-            gasket.position.y = fridgeH;
-            freezer.add(gasket);
+
 
             // Bright interior lining
             const linerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
@@ -227,14 +292,14 @@ export class KitchenRenderer {
             // T-Bone steaks (detailed with bone)
             for (let i = 0; i < 2; i++) {
                 const steakGroup = new THREE.Group();
-                
+
                 // Main meat body
                 const meat = new THREE.Mesh(
                     new THREE.BoxGeometry(sz * 0.35, 0.06, sz * 0.25),
                     meatMat
                 );
                 steakGroup.add(meat);
-                
+
                 // T-bone (white bone detail)
                 const boneMat = new THREE.MeshStandardMaterial({ color: 0xFFFAF0, roughness: 0.6 });
                 const boneH = new THREE.Mesh(
@@ -243,14 +308,14 @@ export class KitchenRenderer {
                 );
                 boneH.position.set(sz * 0.1, 0, 0);
                 steakGroup.add(boneH);
-                
+
                 const boneV = new THREE.Mesh(
                     new THREE.BoxGeometry(sz * 0.04, 0.065, sz * 0.15),
                     boneMat
                 );
                 boneV.position.set(sz * 0.1, 0, sz * 0.05);
                 steakGroup.add(boneV);
-                
+
                 // Fat marbling (white streaks)
                 for (let f = 0; f < 3; f++) {
                     const fat = new THREE.Mesh(
@@ -265,14 +330,14 @@ export class KitchenRenderer {
                     fat.rotation.y = Math.random() * Math.PI;
                     steakGroup.add(fat);
                 }
-                
+
                 // Plastic wrap
                 const wrap = new THREE.Mesh(
                     new THREE.BoxGeometry(sz * 0.38, 0.08, sz * 0.28),
                     wrapMat
                 );
                 steakGroup.add(wrap);
-                
+
                 steakGroup.position.set(-sz * 0.2, 0.1 + i * 0.08, (i - 0.5) * 0.15);
                 steakGroup.rotation.y = (Math.random() - 0.5) * 0.3;
                 meatSection.add(steakGroup);
@@ -281,26 +346,26 @@ export class KitchenRenderer {
             // Ground meat packages (vacuum sealed)
             for (let i = 0; i < 2; i++) {
                 const pkgGroup = new THREE.Group();
-                
+
                 const pkg = new THREE.Mesh(
                     new THREE.BoxGeometry(sz * 0.4, 0.06, sz * 0.3),
                     new THREE.MeshStandardMaterial({ color: 0xA52A2A, roughness: 0.6 })
                 );
                 pkgGroup.add(pkg);
-                
+
                 // Vacuum seal texture (tight wrap)
                 const seal = new THREE.Mesh(
                     new THREE.BoxGeometry(sz * 0.42, 0.065, sz * 0.32),
-                    new THREE.MeshStandardMaterial({ 
-                        color: 0xFFFFFF, 
-                        transparent: true, 
+                    new THREE.MeshStandardMaterial({
+                        color: 0xFFFFFF,
+                        transparent: true,
                         opacity: 0.3,
                         roughness: 0.1,
                         metalness: 0.2
                     })
                 );
                 pkgGroup.add(seal);
-                
+
                 // Label sticker
                 const label = new THREE.Mesh(
                     new THREE.PlaneGeometry(sz * 0.25, sz * 0.08),
@@ -309,7 +374,7 @@ export class KitchenRenderer {
                 label.rotation.x = -Math.PI / 2;
                 label.position.y = 0.035;
                 pkgGroup.add(label);
-                
+
                 pkgGroup.position.set(sz * 0.15, 0.25 + i * 0.08, (i - 0.5) * 0.12);
                 pkgGroup.rotation.y = (Math.random() - 0.5) * 0.4;
                 meatSection.add(pkgGroup);
@@ -320,21 +385,21 @@ export class KitchenRenderer {
 
             // FISH SECTION (Right side)
             const fishSection = new THREE.Group();
-            const fishMat = new THREE.MeshStandardMaterial({ 
-                color: 0xFA8072, 
-                metalness: 0.3, 
-                roughness: 0.4 
+            const fishMat = new THREE.MeshStandardMaterial({
+                color: 0xFA8072,
+                metalness: 0.3,
+                roughness: 0.4
             });
-            const fishSilverMat = new THREE.MeshStandardMaterial({ 
-                color: 0xC0C0C0, 
-                metalness: 0.7, 
-                roughness: 0.2 
+            const fishSilverMat = new THREE.MeshStandardMaterial({
+                color: 0xC0C0C0,
+                metalness: 0.7,
+                roughness: 0.2
             });
 
             // Whole fish (detailed with fins and tail)
             for (let i = 0; i < 2; i++) {
                 const fishGroup = new THREE.Group();
-                
+
                 // Fish body
                 const body = new THREE.Mesh(
                     new THREE.SphereGeometry(0.08, 16, 12),
@@ -342,7 +407,7 @@ export class KitchenRenderer {
                 );
                 body.scale.set(1.8, 0.6, 0.5);
                 fishGroup.add(body);
-                
+
                 // Fish tail (V-shape)
                 const tailUpper = new THREE.Mesh(
                     new THREE.ConeGeometry(0.06, 0.15, 3),
@@ -351,7 +416,7 @@ export class KitchenRenderer {
                 tailUpper.rotation.z = -Math.PI / 1.5;
                 tailUpper.position.set(0.18, 0.04, 0);
                 fishGroup.add(tailUpper);
-                
+
                 const tailLower = new THREE.Mesh(
                     new THREE.ConeGeometry(0.06, 0.15, 3),
                     fishMat
@@ -359,7 +424,7 @@ export class KitchenRenderer {
                 tailLower.rotation.z = -Math.PI / 3;
                 tailLower.position.set(0.18, -0.04, 0);
                 fishGroup.add(tailLower);
-                
+
                 // Dorsal fin
                 const dorsalFin = new THREE.Mesh(
                     new THREE.ConeGeometry(0.04, 0.08, 3),
@@ -368,7 +433,7 @@ export class KitchenRenderer {
                 dorsalFin.rotation.z = Math.PI / 4;
                 dorsalFin.position.set(0, 0.08, 0);
                 fishGroup.add(dorsalFin);
-                
+
                 // Eye
                 const eye = new THREE.Mesh(
                     new THREE.SphereGeometry(0.015, 8, 8),
@@ -376,7 +441,7 @@ export class KitchenRenderer {
                 );
                 eye.position.set(-0.12, 0.03, 0.03);
                 fishGroup.add(eye);
-                
+
                 // Silver scales effect
                 for (let s = 0; s < 5; s++) {
                     const scale = new THREE.Mesh(
@@ -391,12 +456,12 @@ export class KitchenRenderer {
                     scale.rotation.y = Math.PI / 2;
                     fishGroup.add(scale);
                 }
-                
+
                 // Ice crystals on fish
-                const iceMat = new THREE.MeshStandardMaterial({ 
-                    color: 0xD4F1F9, 
-                    transparent: true, 
-                    opacity: 0.6 
+                const iceMat = new THREE.MeshStandardMaterial({
+                    color: 0xD4F1F9,
+                    transparent: true,
+                    opacity: 0.6
                 });
                 for (let ic = 0; ic < 3; ic++) {
                     const ice = new THREE.Mesh(
@@ -415,7 +480,7 @@ export class KitchenRenderer {
                     );
                     fishGroup.add(ice);
                 }
-                
+
                 fishGroup.rotation.set(
                     (Math.random() - 0.5) * 0.3,
                     Math.random() * Math.PI * 2,
@@ -432,17 +497,17 @@ export class KitchenRenderer {
             // Salmon fillets (pink with white fat lines)
             for (let i = 0; i < 3; i++) {
                 const filletGroup = new THREE.Group();
-                
+
                 const fillet = new THREE.Mesh(
                     new THREE.BoxGeometry(0.25, 0.04, 0.15),
-                    new THREE.MeshStandardMaterial({ 
+                    new THREE.MeshStandardMaterial({
                         color: 0xFA8072,
                         roughness: 0.4,
                         metalness: 0.1
                     })
                 );
                 filletGroup.add(fillet);
-                
+
                 // White fat lines (marbling)
                 for (let fl = 0; fl < 2; fl++) {
                     const fatLine = new THREE.Mesh(
@@ -453,19 +518,19 @@ export class KitchenRenderer {
                     fatLine.rotation.y = (Math.random() - 0.5) * 0.2;
                     filletGroup.add(fatLine);
                 }
-                
+
                 // Plastic wrap
                 const wrap = new THREE.Mesh(
                     new THREE.BoxGeometry(0.27, 0.045, 0.17),
-                    new THREE.MeshStandardMaterial({ 
-                        color: 0xFFFFFF, 
-                        transparent: true, 
+                    new THREE.MeshStandardMaterial({
+                        color: 0xFFFFFF,
+                        transparent: true,
                         opacity: 0.3,
                         roughness: 0.1
                     })
                 );
                 filletGroup.add(wrap);
-                
+
                 filletGroup.position.set(
                     sz * 0.3,
                     fridgeH * 0.2 + i * 0.06,
@@ -590,7 +655,7 @@ export class KitchenRenderer {
 
             const frameW = 0.12;
             const frameMat = bodyMat;
-            
+
             // Frame around the glass lid (adjusted for pivot at back)
             lid.add(createWall(sz * 2, 0.08, frameW, 0, 0.04, 0, frameMat)); // back frame (at pivot)
             lid.add(createWall(sz * 2, 0.08, frameW, 0, 0.04, sz * 1.6, frameMat)); // front frame
@@ -599,11 +664,11 @@ export class KitchenRenderer {
 
             // Glass panel (clear view into freezer)
             const glassMat = new THREE.MeshStandardMaterial({
-                color: 0xccf2ff, 
-                transparent: true, 
+                color: 0xccf2ff,
+                transparent: true,
                 opacity: 0.25,
-                roughness: 0.05, 
-                metalness: 0.5, 
+                roughness: 0.05,
+                metalness: 0.5,
                 side: THREE.DoubleSide
             });
             const glass = new THREE.Mesh(new THREE.PlaneGeometry(sz * 1.76, sz * 1.48), glassMat);
@@ -910,7 +975,7 @@ export class KitchenRenderer {
             tray.position.y = baseH + trayH / 2 + 0.05;
             tray.castShadow = true;
             eggGroup.add(tray);
-            
+
             // Carton texture (molded pulp pattern)
             for (let tx = 0; tx < 8; tx++) {
                 const textureLine = new THREE.Mesh(
@@ -927,7 +992,7 @@ export class KitchenRenderer {
 
             // Egg carton dividers (raised walls between eggs)
             const dividerMat = new THREE.MeshStandardMaterial({ color: 0xB89860, roughness: 0.95 });
-            
+
             // Vertical dividers
             for (let col = 0; col < 5; col++) {
                 const divider = new THREE.Mesh(
@@ -941,7 +1006,7 @@ export class KitchenRenderer {
                 );
                 eggGroup.add(divider);
             }
-            
+
             // Horizontal dividers
             for (let row = 0; row < 4; row++) {
                 const divider = new THREE.Mesh(
@@ -972,20 +1037,20 @@ export class KitchenRenderer {
 
                     // Realistic egg sitting in cup
                     const eggGroup2 = new THREE.Group();
-                    const eggMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFF8DC, 
+                    const eggMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFF8DC,
                         roughness: 0.4,
                         metalness: 0.05
                     });
                     const egg = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 12), eggMat);
                     egg.scale.set(0.85, 1.2, 0.85);
                     eggGroup2.add(egg);
-                    
+
                     // Brown speckles on eggs
                     for (let sp = 0; sp < 4; sp++) {
                         const speckle = new THREE.Mesh(
                             new THREE.SphereGeometry(0.004, 6, 6),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0xD4A574,
                                 transparent: true,
                                 opacity: 0.5
@@ -1000,7 +1065,7 @@ export class KitchenRenderer {
                         );
                         eggGroup2.add(speckle);
                     }
-                    
+
                     eggGroup2.position.set(xPos, baseH + 0.15, zPos);
                     eggGroup2.rotation.set(
                         (Math.random() - 0.5) * 0.2,
@@ -1011,11 +1076,11 @@ export class KitchenRenderer {
                     eggGroup.add(eggGroup2);
                 }
             }
-            
+
             // Carton label (brand sticker)
-            const labelMat = new THREE.MeshStandardMaterial({ 
-                color: 0xFFFFFF, 
-                roughness: 0.3 
+            const labelMat = new THREE.MeshStandardMaterial({
+                color: 0xFFFFFF,
+                roughness: 0.3
             });
             const label = new THREE.Mesh(
                 new THREE.PlaneGeometry(0.25, 0.08),
@@ -1024,7 +1089,7 @@ export class KitchenRenderer {
             label.rotation.x = -Math.PI / 2;
             label.position.set(0, baseH + trayH + 0.053, trayD * 0.35);
             eggGroup.add(label);
-            
+
             // Label text (EGGS)
             const textMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
             const letterE1 = new THREE.Mesh(
@@ -1139,11 +1204,11 @@ export class KitchenRenderer {
         }
 
         if (st.type === 'oven') {
-            // --- MODERN KITCHEN OVEN (Realistic Home/Restaurant Style) ---
-            const steelMat = new THREE.MeshStandardMaterial({ color: 0x2C3E50, roughness: 0.3, metalness: 0.7 });
-            const glassMat = new THREE.MeshStandardMaterial({ 
-                color: 0x1a1a1a, 
-                transparent: true, 
+            // --- MODERN KITCHEN OVEN (HOLLOW LIKE FREEZER) ---
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, roughness: 0.3, metalness: 0.7 });
+            const glassMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1a1a,
+                transparent: true,
                 opacity: 0.6,
                 roughness: 0.1,
                 metalness: 0.3
@@ -1151,23 +1216,44 @@ export class KitchenRenderer {
             const chromeMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.95, roughness: 0.05 });
             const blackMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
 
-            // 1. Oven Base/Body (Tall rectangular box)
-            const ovenBody = new THREE.Mesh(
-                new THREE.BoxGeometry(this.ts * 0.9, 1.2, this.ts * 0.85),
-                steelMat
-            );
-            ovenBody.position.y = baseH + 0.6;
-            ovenBody.castShadow = true;
-            group.add(ovenBody);
+            // Hollow chassis like freezer
+            const ovenGroup = new THREE.Group();
+            const ovenH = 1.2;
+            const sz = this.ts * 0.46;
+            const th = 0.04;
+
+            const createWall = (width, height, depth, x, y, z) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), steelMat);
+                wall.position.set(x, y, z);
+                return wall;
+            };
+
+            // Exterior walls (NO FRONT - it's open for the door)
+            ovenGroup.add(createWall(this.ts * 0.9, ovenH, th, 0, ovenH / 2, -this.ts * 0.425)); // back
+            ovenGroup.add(createWall(th, ovenH, this.ts * 0.85, -this.ts * 0.45, ovenH / 2, 0)); // left
+            ovenGroup.add(createWall(th, ovenH, this.ts * 0.85, this.ts * 0.45, ovenH / 2, 0)); // right
+            ovenGroup.add(createWall(this.ts * 0.9, th, this.ts * 0.85, 0, th / 2, 0)); // bottom
+            ovenGroup.add(createWall(this.ts * 0.9, th, this.ts * 0.85, 0, ovenH - th / 2, 0)); // top
+
+            // Bright interior lining (like freezer)
+            const linerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 });
+            const innerH = ovenH * 0.8;
+            ovenGroup.add(createWall(this.ts * 0.8, innerH, 0.02, 0, ovenH * 0.6, -this.ts * 0.405, linerMat)); // back inner
+            ovenGroup.add(createWall(0.02, innerH, this.ts * 0.75, -this.ts * 0.4, ovenH * 0.6, 0, linerMat)); // left inner
+            ovenGroup.add(createWall(0.02, innerH, this.ts * 0.75, this.ts * 0.4, ovenH * 0.6, 0, linerMat)); // right inner
+            ovenGroup.add(createWall(this.ts * 0.8, 0.02, this.ts * 0.75, 0, ovenH * 0.2, 0, linerMat)); // bottom inner
+
+            group.add(ovenGroup);
+            ovenGroup.position.y = baseH + 0.0;
 
             // Control panel on top
             const controlPanel = new THREE.Mesh(
                 new THREE.BoxGeometry(this.ts * 0.88, 0.15, 0.08),
                 blackMat
             );
-            controlPanel.position.set(0, baseH + 1.25, this.ts * 0.42);
+            controlPanel.position.set(0, baseH + 1.2, this.ts * 0.42);
             group.add(controlPanel);
-            
+
             // Control knobs
             for (let k = 0; k < 4; k++) {
                 const knob = new THREE.Mesh(
@@ -1177,11 +1263,11 @@ export class KitchenRenderer {
                 knob.rotation.x = Math.PI / 2;
                 knob.position.set(
                     -0.25 + k * 0.17,
-                    baseH + 1.25,
+                    baseH + 1.2,
                     this.ts * 0.47
                 );
                 group.add(knob);
-                
+
                 // Knob indicator line
                 const indicator = new THREE.Mesh(
                     new THREE.BoxGeometry(0.02, 0.025, 0.002),
@@ -1195,14 +1281,14 @@ export class KitchenRenderer {
             // 2. Oven Door (Front with glass window) - Make it a separate group for animation
             const ovenDoor = new THREE.Group();
             ovenDoor.name = 'ovenDoor';
-            
+
             const doorFrame = new THREE.Mesh(
                 new THREE.BoxGeometry(this.ts * 0.85, 0.95, 0.08),
                 steelMat
             );
             doorFrame.position.set(0, 0.475, 0);
             ovenDoor.add(doorFrame);
-            
+
             // Glass window in door
             const windowGlass = new THREE.Mesh(
                 new THREE.BoxGeometry(this.ts * 0.7, 0.7, 0.02),
@@ -1210,7 +1296,7 @@ export class KitchenRenderer {
             );
             windowGlass.position.set(0, 0.545, 0.05);
             ovenDoor.add(windowGlass);
-            
+
             // Window frame grid (cross pattern)
             const gridMat = new THREE.MeshStandardMaterial({ color: 0x34495e, metalness: 0.5 });
             const gridH = new THREE.Mesh(
@@ -1219,7 +1305,7 @@ export class KitchenRenderer {
             );
             gridH.position.set(0, 0.545, 0.06);
             ovenDoor.add(gridH);
-            
+
             const gridV = new THREE.Mesh(
                 new THREE.BoxGeometry(0.015, 0.72, 0.025),
                 gridMat
@@ -1234,7 +1320,7 @@ export class KitchenRenderer {
             );
             handle.position.set(0, 0.975, 0.05);
             ovenDoor.add(handle);
-            
+
             // Handle end caps
             for (let e = 0; e < 2; e++) {
                 const cap = new THREE.Mesh(
@@ -1248,31 +1334,25 @@ export class KitchenRenderer {
                 );
                 ovenDoor.add(cap);
             }
-            
+
             // Set pivot point at bottom front edge for door swing down
-            ovenDoor.position.set(0, baseH + 0.105, this.ts * 0.47);
+            ovenDoor.position.set(0, baseH + 0.0, this.ts * 0.425);
             group.add(ovenDoor);
 
-            // 3. Oven Interior (visible through glass)
-            const interior = new THREE.Mesh(
-                new THREE.BoxGeometry(this.ts * 0.75, 0.85, this.ts * 0.7),
-                new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8 })
-            );
-            interior.position.set(0, baseH + 0.6, 0.1);
-            group.add(interior);
-            
+            // 3. Oven Interior (removed - now hollow)
+
             // Oven racks (2 levels)
             const rackMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.6 });
             for (let r = 0; r < 2; r++) {
                 const rack = new THREE.Group();
-                
+
                 // Rack frame
                 const rackFrame = new THREE.Mesh(
                     new THREE.BoxGeometry(this.ts * 0.7, 0.015, this.ts * 0.65),
                     rackMat
                 );
                 rack.add(rackFrame);
-                
+
                 // Rack bars
                 for (let bar = 0; bar < 8; bar++) {
                     const rackBar = new THREE.Mesh(
@@ -1282,7 +1362,7 @@ export class KitchenRenderer {
                     rackBar.position.x = -this.ts * 0.3 + bar * (this.ts * 0.6 / 7);
                     rack.add(rackBar);
                 }
-                
+
                 rack.position.set(0, baseH + 0.4 + r * 0.35, 0.1);
                 group.add(rack);
             }
@@ -1290,35 +1370,35 @@ export class KitchenRenderer {
             // 4. Interior light/glow (orange when heating)
             const ovenLight = new THREE.Mesh(
                 new THREE.BoxGeometry(this.ts * 0.7, 0.8, this.ts * 0.65),
-                new THREE.MeshBasicMaterial({ 
-                    color: 0xff6600, 
-                    transparent: true, 
-                    opacity: 0.0 
+                new THREE.MeshBasicMaterial({
+                    color: 0xff6600,
+                    transparent: true,
+                    opacity: 0.0
                 })
             );
-            ovenLight.position.set(0, baseH + 0.6, 0.1);
+            ovenLight.position.set(0, baseH + 0.0, 0.1);
             group.add(ovenLight);
-            
+
             // Heating element at bottom (visible coil)
             const heatingElement = new THREE.Group();
             for (let coil = 0; coil < 3; coil++) {
                 const element = new THREE.Mesh(
                     new THREE.TorusGeometry(0.12 - coil * 0.04, 0.012, 8, 16),
-                    new THREE.MeshStandardMaterial({ 
+                    new THREE.MeshStandardMaterial({
                         color: 0x333333,
                         emissive: 0xff0000,
                         emissiveIntensity: 0
                     })
                 );
                 element.rotation.x = Math.PI / 2;
-                element.position.y = baseH + 0.22;
+                element.position.y = baseH + 0.05;
                 heatingElement.add(element);
             }
             group.add(heatingElement);
 
             // Store for animation
-            this.stationEffects[st.id] = { 
-                glow: ovenLight, 
+            this.stationEffects[st.id] = {
+                glow: ovenLight,
                 glowMat: ovenLight.material,
                 heatingElement: heatingElement,
                 door: ovenDoor,
@@ -1333,7 +1413,7 @@ export class KitchenRenderer {
                 );
                 vent.position.set(
                     -0.2 + v * 0.08,
-                    baseH + 1.21,
+                    baseH + 1.19,
                     this.ts * 0.35
                 );
                 group.add(vent);
@@ -1391,14 +1471,14 @@ export class KitchenRenderer {
                     for (let item = 0; item < fillCount; item++) {
                         let ingMesh;
                         const sz = 0.12 + Math.random() * 0.04; // Big produce
-                        
+
                         if (st.ingredient === 'tomato') {
                             // Realistic tomato with segments and stem
                             const tomatoGroup = new THREE.Group();
                             const body = new THREE.Mesh(new THREE.SphereGeometry(sz, 16, 16), ingMat);
                             body.scale.y = 0.9;
                             tomatoGroup.add(body);
-                            
+
                             // Segments
                             for (let seg = 0; seg < 6; seg++) {
                                 const segment = new THREE.Mesh(
@@ -1410,13 +1490,13 @@ export class KitchenRenderer {
                                 segment.rotation.y = angle;
                                 tomatoGroup.add(segment);
                             }
-                            
+
                             // Green stem
                             const stemMat = new THREE.MeshStandardMaterial({ color: 0x27ae60 });
                             const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.03, 6), stemMat);
                             stem.position.y = sz * 0.9;
                             tomatoGroup.add(stem);
-                            
+
                             // Calyx leaves
                             for (let cl = 0; cl < 5; cl++) {
                                 const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.04, 3), stemMat);
@@ -1426,19 +1506,19 @@ export class KitchenRenderer {
                                 tomatoGroup.add(leaf);
                             }
                             ingMesh = tomatoGroup;
-                            
+
                         } else if (st.ingredient === 'onion') {
                             // Realistic onion with layers and sprout
                             const onionGroup = new THREE.Group();
                             const body = new THREE.Mesh(new THREE.SphereGeometry(sz * 0.9, 16, 16), ingMat);
                             body.scale.set(1, 1.1, 1);
                             onionGroup.add(body);
-                            
+
                             // Onion layers
                             for (let layer = 0; layer < 3; layer++) {
                                 const ring = new THREE.Mesh(
                                     new THREE.TorusGeometry(sz * 0.85 - layer * 0.015, 0.003, 8, 16),
-                                    new THREE.MeshStandardMaterial({ 
+                                    new THREE.MeshStandardMaterial({
                                         color: 0xE8D5B7,
                                         transparent: true,
                                         opacity: 0.6
@@ -1448,7 +1528,7 @@ export class KitchenRenderer {
                                 ring.position.y = 0.02 + layer * 0.03;
                                 onionGroup.add(ring);
                             }
-                            
+
                             // Green sprout
                             const sprout = new THREE.Mesh(
                                 new THREE.CylinderGeometry(0.008, 0.01, 0.06, 6),
@@ -1456,7 +1536,7 @@ export class KitchenRenderer {
                             );
                             sprout.position.y = sz * 1.1;
                             onionGroup.add(sprout);
-                            
+
                             // Root tip
                             const tip = new THREE.Mesh(
                                 new THREE.ConeGeometry(0.02, 0.06, 6),
@@ -1466,7 +1546,7 @@ export class KitchenRenderer {
                             tip.rotation.x = Math.PI;
                             onionGroup.add(tip);
                             ingMesh = onionGroup;
-                            
+
                         } else if (st.ingredient === 'mushroom') {
                             // Realistic mushroom with cap and stem
                             const mG = new THREE.Group();
@@ -1475,14 +1555,14 @@ export class KitchenRenderer {
                                 new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 })
                             );
                             mG.add(stem);
-                            
+
                             const mCap = new THREE.Mesh(
                                 new THREE.SphereGeometry(sz * 0.7, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
                                 ingMat
                             );
                             mCap.position.y = 0.04;
                             mG.add(mCap);
-                            
+
                             // Gills under cap
                             const gills = new THREE.Mesh(
                                 new THREE.CylinderGeometry(sz * 0.65, sz * 0.68, 0.01, 16),
@@ -1491,7 +1571,7 @@ export class KitchenRenderer {
                             gills.position.y = 0.035;
                             mG.add(gills);
                             ingMesh = mG;
-                            
+
                         } else if (st.ingredient === 'lettuce') {
                             // Realistic lettuce head with leaves
                             const lettuceGroup = new THREE.Group();
@@ -1501,13 +1581,13 @@ export class KitchenRenderer {
                             );
                             core.scale.y = 0.6;
                             lettuceGroup.add(core);
-                            
+
                             // Multiple leaves
                             for (let lf = 0; lf < 6; lf++) {
                                 const leaf = new THREE.Mesh(
                                     new THREE.PlaneGeometry(sz * 0.8, sz * 0.9),
-                                    new THREE.MeshStandardMaterial({ 
-                                        color: ingMat.color, 
+                                    new THREE.MeshStandardMaterial({
+                                        color: ingMat.color,
                                         side: THREE.DoubleSide,
                                         roughness: 0.9
                                     })
@@ -1522,7 +1602,7 @@ export class KitchenRenderer {
                                 lettuceGroup.add(leaf);
                             }
                             ingMesh = lettuceGroup;
-                            
+
                         } else if (st.ingredient === 'cheese') {
                             ingMesh = new THREE.Mesh(new THREE.CylinderGeometry(sz * 0.8, sz * 0.8, 0.08, 3), ingMat);
                         } else if (st.ingredient === 'egg') {
@@ -1530,12 +1610,12 @@ export class KitchenRenderer {
                             const egg = new THREE.Mesh(new THREE.SphereGeometry(sz * 0.6, 12, 12), ingMat);
                             egg.scale.set(0.7, 1, 0.7);
                             eggGroup.add(egg);
-                            
+
                             // Speckles
                             for (let sp = 0; sp < 3; sp++) {
                                 const speckle = new THREE.Mesh(
                                     new THREE.SphereGeometry(0.003, 4, 4),
-                                    new THREE.MeshStandardMaterial({ 
+                                    new THREE.MeshStandardMaterial({
                                         color: 0xD4A574,
                                         transparent: true,
                                         opacity: 0.4
@@ -1550,18 +1630,18 @@ export class KitchenRenderer {
                                 eggGroup.add(speckle);
                             }
                             ingMesh = eggGroup;
-                            
+
                         } else if (st.ingredient === 'dough') {
                             const doughGroup = new THREE.Group();
                             const dough = new THREE.Mesh(new THREE.SphereGeometry(sz, 12, 12), ingMat);
                             dough.scale.y = 0.55;
                             doughGroup.add(dough);
-                            
+
                             // Flour dusting
                             for (let f = 0; f < 5; f++) {
                                 const flour = new THREE.Mesh(
                                     new THREE.SphereGeometry(0.008, 6, 6),
-                                    new THREE.MeshStandardMaterial({ 
+                                    new THREE.MeshStandardMaterial({
                                         color: 0xFFFFF0,
                                         transparent: true,
                                         opacity: 0.5
@@ -1576,7 +1656,7 @@ export class KitchenRenderer {
                                 doughGroup.add(flour);
                             }
                             ingMesh = doughGroup;
-                            
+
                         } else if (st.ingredient === 'bread') {
                             const breadGroup = new THREE.Group();
                             const bun = new THREE.Mesh(
@@ -1585,7 +1665,7 @@ export class KitchenRenderer {
                             );
                             bun.scale.y = 0.6;
                             breadGroup.add(bun);
-                            
+
                             // Sesame seeds
                             for (let s = 0; s < 4; s++) {
                                 const seed = new THREE.Mesh(
@@ -1601,7 +1681,7 @@ export class KitchenRenderer {
                                 breadGroup.add(seed);
                             }
                             ingMesh = breadGroup;
-                            
+
                         } else {
                             ingMesh = new THREE.Mesh(new THREE.SphereGeometry(sz, 8, 8), ingMat);
                         }
@@ -1743,7 +1823,7 @@ export class KitchenRenderer {
             // Premium counter base
             if (mesh) mesh.material = new THREE.MeshStandardMaterial({ color: 0x34495e, roughness: 0.3, metalness: 0.2 });
             if (top) top.material = steelMat;
-            
+
             // Decorative trim around counter edge
             const trim = new THREE.Mesh(
                 new THREE.TorusGeometry(this.ts * 0.46, 0.015, 8, 32),
@@ -1771,7 +1851,7 @@ export class KitchenRenderer {
             );
             railBase.position.set(0, baseH + 0.08, -this.ts * 0.38);
             group.add(railBase);
-            
+
             // Hanging clips
             for (let i = 0; i < 4; i++) {
                 const clip = new THREE.Mesh(
@@ -1792,7 +1872,7 @@ export class KitchenRenderer {
                 paper.rotation.x = -Math.PI / 2.2;
                 paper.rotation.y = (i - 1) * 0.1;
                 group.add(paper);
-                
+
                 // Printed text lines
                 for (let line = 0; line < 3; line++) {
                     const text = new THREE.Mesh(
@@ -1809,17 +1889,17 @@ export class KitchenRenderer {
 
             // 3. Elegant Serving Display
             const displayGroup = new THREE.Group();
-            
+
             // Large decorative plate (white porcelain)
-            const plateMat = new THREE.MeshStandardMaterial({ 
-                color: 0xFFFFF8, 
+            const plateMat = new THREE.MeshStandardMaterial({
+                color: 0xFFFFF8,
                 roughness: 0.1,
                 metalness: 0.1
             });
             const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.42, 0.035, 48), plateMat);
             plate.position.y = baseH + 0.068;
             displayGroup.add(plate);
-            
+
             // Gold rim on plate
             const plateRim = new THREE.Mesh(
                 new THREE.TorusGeometry(0.44, 0.008, 8, 48),
@@ -1830,22 +1910,22 @@ export class KitchenRenderer {
             displayGroup.add(plateRim);
 
             // Silver utensils (crossed elegantly)
-            const silverMat = new THREE.MeshStandardMaterial({ 
-                color: 0xC0C0C0, 
-                metalness: 0.95, 
-                roughness: 0.05 
+            const silverMat = new THREE.MeshStandardMaterial({
+                color: 0xC0C0C0,
+                metalness: 0.95,
+                roughness: 0.05
             });
-            
+
             // Fork (left side)
             const fork = new THREE.Group();
             const fHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.6, 12), silverMat);
             fHandle.position.y = 0.3;
             fork.add(fHandle);
-            
+
             const fHead = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.025), silverMat);
             fHead.position.y = 0.62;
             fork.add(fHead);
-            
+
             for (let p = 0; p < 4; p++) {
                 const prong = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.14, 0.025), silverMat);
                 prong.position.set(-0.055 + p * 0.037, 0.72, 0);
@@ -1855,7 +1935,7 @@ export class KitchenRenderer {
             fork.rotation.z = 0.5;
             fork.position.set(-0.15, baseH + 0.11, -0.05);
             displayGroup.add(fork);
-            
+
             // Knife (center)
             const knife = new THREE.Group();
             const kHandle = new THREE.Mesh(
@@ -1864,14 +1944,14 @@ export class KitchenRenderer {
             );
             kHandle.position.y = 0.25;
             knife.add(kHandle);
-            
+
             const blade = new THREE.Mesh(
                 new THREE.BoxGeometry(0.04, 0.45, 0.008),
                 silverMat
             );
             blade.position.y = 0.73;
             knife.add(blade);
-            
+
             // Blade edge (sharp)
             const bladeEdge = new THREE.Mesh(
                 new THREE.BoxGeometry(0.005, 0.45, 0.008),
@@ -1879,22 +1959,22 @@ export class KitchenRenderer {
             );
             bladeEdge.position.set(0.02, 0.73, 0);
             knife.add(bladeEdge);
-            
+
             knife.rotation.x = -Math.PI / 2;
             knife.position.set(0, baseH + 0.11, 0);
             displayGroup.add(knife);
-            
+
             // Spoon (right side)
             const spoon = new THREE.Group();
             const sHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.6, 12), silverMat);
             sHandle.position.y = 0.3;
             spoon.add(sHandle);
-            
+
             const sHead = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), silverMat);
             sHead.scale.set(1.3, 1.8, 0.4);
             sHead.position.y = 0.64;
             spoon.add(sHead);
-            
+
             spoon.rotation.x = -Math.PI / 2;
             spoon.rotation.z = -0.5;
             spoon.position.set(0.15, baseH + 0.11, 0.05);
@@ -1908,14 +1988,14 @@ export class KitchenRenderer {
             const sz = this.ts * 0.88; // Full counter footprint width
 
             // Body (big square metal box matching counter height)
-            const canMat = new THREE.MeshStandardMaterial({ color: 0x6E7A7A, roughness: 0.25, metalness: 0.75 });
+            const canMat = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.25, metalness: 0.75 });
             const canBody = new THREE.Mesh(new THREE.BoxGeometry(sz, baseH * 0.95, sz), canMat);
             canBody.position.y = baseH * 0.95 / 2;
             canBody.castShadow = true;
             trashGroup.add(canBody);
 
-            // Red accent band at mid-height
-            const bandMat = new THREE.MeshStandardMaterial({ color: 0xBB1111, roughness: 0.4, metalness: 0.3 });
+            // Green accent band at mid-height
+            const bandMat = new THREE.MeshStandardMaterial({ color: 0x32CD32, roughness: 0.4, metalness: 0.3 });
             const band = new THREE.Mesh(new THREE.BoxGeometry(sz + 0.01, 0.09, sz + 0.01), bandMat);
             band.position.y = baseH * 0.95 * 0.42;
             trashGroup.add(band);
@@ -1927,7 +2007,7 @@ export class KitchenRenderer {
             trashGroup.add(panel);
 
             // Little black X on the panel
-            const xMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+            const xMat = new THREE.MeshStandardMaterial({ color: 0x006400, roughness: 0.8 });
             const xBar1 = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.2, 0.015, 0.013), xMat);
             xBar1.rotation.z = Math.PI / 4;
             xBar1.position.set(0, baseH * 0.55, sz * 0.508);
@@ -1937,17 +2017,17 @@ export class KitchenRenderer {
             xBar2.position.set(0, baseH * 0.55, sz * 0.509);
             trashGroup.add(xBar2);
 
-            // Interior (visible dark top)
-            const interiorMat = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 1.0 });
-            const interior = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.93, baseH * 0.92, sz * 0.93), interiorMat);
-            interior.position.y = baseH * 0.90 / 2 + 0.02;
-            trashGroup.add(interior);
+            // Interior (visible dark top) - REMOVED to make hollow
+            // const interiorMat = new THREE.MeshStandardMaterial({ color: 0x006400, roughness: 1.0 });
+            // const interior = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.93, baseH * 0.92, sz * 0.93), interiorMat);
+            // interior.position.y = baseH * 0.90 / 2 + 0.02;
+            // trashGroup.add(interior);
 
-            // Black bag neck visible at top
-            const bagMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
-            const bag = new THREE.Mesh(new THREE.CylinderGeometry(sz * 0.25, sz * 0.35, sz * 0.18, 8), bagMat);
-            bag.position.y = baseH * 0.945;
-            trashGroup.add(bag);
+            // Green bag neck visible at top - REMOVED to make hollow
+            // const bagMat = new THREE.MeshStandardMaterial({ color: 0x006400, roughness: 0.9 });
+            // const bag = new THREE.Mesh(new THREE.CylinderGeometry(sz * 0.25, sz * 0.35, sz * 0.18, 8), bagMat);
+            // bag.position.y = baseH * 0.945;
+            // trashGroup.add(bag);
 
             // LID GROUP (hinged at back edge)
             const lidGroup = new THREE.Group();
@@ -1955,19 +2035,19 @@ export class KitchenRenderer {
             lidGroup.position.set(0, baseH * 0.955, -sz * 0.41);
             trashGroup.add(lidGroup);
 
-            const lidMat = new THREE.MeshStandardMaterial({ color: 0x576060, roughness: 0.2, metalness: 0.88 });
+            const lidMat = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.2, metalness: 0.88 });
             const lid = new THREE.Mesh(new THREE.BoxGeometry(sz + 0.02, 0.055, sz + 0.02), lidMat);
             lid.position.set(0, 0.028, sz * 0.41);
             lidGroup.add(lid);
 
             // Lid handle (wide bar on top)
-            const handleMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.95 });
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x006400, metalness: 0.95 });
             const lHandle = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.35, 0.045, 0.06), handleMat);
             lHandle.position.set(0, 0.065, sz * 0.41);
             lidGroup.add(lHandle);
 
             // Foot pedal at base
-            const pedalMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.75 });
+            const pedalMat = new THREE.MeshStandardMaterial({ color: 0x006400, metalness: 0.75 });
             const pedal = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.4, 0.035, sz * 0.22), pedalMat);
             pedal.position.set(0, 0.018, sz * 0.48);
             trashGroup.add(pedal);
@@ -2147,6 +2227,13 @@ export class KitchenRenderer {
         uiContainer.name = 'uiContainer';
         uiContainer.rotation.y = -group.rotation.y;
         group.add(uiContainer);
+
+        // --- SEASONING LABELS ---
+        if (st.type === 'seasoning') {
+            const labelText = st.ingredient === 'salt' ? 'SALT' : 'SAUCE';
+            const labelColor = st.ingredient === 'salt' ? 0xFFFFFF : 0xFFD700;
+            this.addLabel(uiContainer, labelText, 1.2, 'seasoningLabel');
+        }
 
         this.scene.add(group);
         this.stationMeshes[st.id] = { group, baseMesh: mesh, topMesh: top, uiContainer };
@@ -2502,6 +2589,30 @@ export class KitchenRenderer {
             const ewr = ui.getObjectByName('washReadyIcon'); if (ewr) ui.remove(ewr);
         }
 
+        // --- GARNISH PROGRESS BAR LOGIC ---
+        if (stationData.garnishProgress > 0) {
+            const egb = ui.getObjectByName('garnishBar'); if (egb) ui.remove(egb);
+            const egg = ui.getObjectByName('garnishBarBg'); if (egg) ui.remove(egg);
+
+            const bgGeo = new THREE.BoxGeometry(this.ts * 0.82, 0.12, 0.18);
+            const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 });
+            const bg = new THREE.Mesh(bgGeo, bgMat);
+            bg.name = 'garnishBarBg';
+            bg.position.set(0, 1.8, -0.6);
+            ui.add(bg);
+
+            const p = Math.min(stationData.garnishProgress / 100, 1.0);
+            const barGeo = new THREE.BoxGeometry(this.ts * 0.8 * p, 0.08, 0.15);
+            const barMat = new THREE.MeshBasicMaterial({ color: 0x27ae60 }); // Green for garnish
+            const bar = new THREE.Mesh(barGeo, barMat);
+            bar.name = 'garnishBar';
+            bar.position.set(-this.ts * 0.4 * (1 - p), 1.8, -0.6);
+            ui.add(bar);
+        } else {
+            const egb = ui.getObjectByName('garnishBar'); if (egb) ui.remove(egb);
+            const egg = ui.getObjectByName('garnishBarBg'); if (egg) ui.remove(egg);
+        }
+
         // --- SINK WATER EFFECT ---
         if (stationData.type === 'sink') {
             const eff = this.stationEffects[stationId];
@@ -2516,12 +2627,72 @@ export class KitchenRenderer {
                 }
             }
         }
+
+        // --- RARE SEASONING VISUAL (Timed Effect) ---
+        const existingRS = sm.group.getObjectByName('rareSeasoningModel');
+        if (existingRS) sm.group.remove(existingRS);
+
+        if (stationData.type === 'seasoning' && stationData.rareSeasoning) {
+            const bottle = this.createContentMesh({ type: 'seasoning', name: stationData.rareSeasoning });
+            bottle.name = 'rareSeasoningModel';
+            bottle.scale.set(1.2, 1.2, 1.2);
+            // Position on top-right corner of the counter so it doesn't block plate slot
+            bottle.position.set(0.3, 1.0, -0.3);
+            sm.group.add(bottle);
+        }
     }
 
     createContentMesh(content) {
         const group = new THREE.Group();
 
-        if (content.type === 'ingredient') {
+        if (content.type === 'seasoning') {
+            // --- SEASONING BOTTLES V1 ---
+            const sGroup = new THREE.Group();
+            if (content.name === 'salt') {
+                // Salt Shaker (Glass/Steel)
+                const bodyGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.35, 12);
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: 0xEEEEEE,
+                    transparent: true,
+                    opacity: 0.6,
+                    roughness: 0
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                sGroup.add(body);
+
+                const capGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12);
+                const capMat = new THREE.MeshStandardMaterial({ color: 0xBDC3C7, metalness: 0.8, roughness: 0.2 });
+                const cap = new THREE.Mesh(capGeo, capMat);
+                cap.position.y = 0.2;
+                sGroup.add(cap);
+
+                // Salt crystals inside
+                for (let i = 0; i < 5; i++) {
+                    const cryat = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: 0xFFFFFF }));
+                    cryat.position.set((Math.random() - 0.5) * 0.15, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.15);
+                    sGroup.add(cryat);
+                }
+            } else {
+                // Sauce Bottle (Red Squeeze Bottle)
+                const sauceBodyGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.45, 16);
+                const sauceMat = new THREE.MeshStandardMaterial({ color: 0xD32F2F, roughness: 0.4 });
+                const sBody = new THREE.Mesh(sauceBodyGeo, sauceMat);
+                sGroup.add(sBody);
+
+                const nozzleGeo = new THREE.ConeGeometry(0.08, 0.2, 8);
+                const sNozzle = new THREE.Mesh(nozzleGeo, sauceMat);
+                sNozzle.position.y = 0.3;
+                sGroup.add(sNozzle);
+
+                // Label
+                const label = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.15, 16), new THREE.MeshStandardMaterial({ color: 0xFFEB3B }));
+                sGroup.add(label);
+            }
+            sGroup.scale.set(1.5, 1.5, 1.5);
+            sGroup.userData.isSeasoning = true;
+            return sGroup;
+        } else if (content.type === 'ingredient') {
+            // Ingredient logic follows
             const ing = this.config.INGREDIENTS[content.name];
             let color = new THREE.Color(ing ? ing.color : 0xffffff);
 
@@ -2531,8 +2702,7 @@ export class KitchenRenderer {
                 color.multiplyScalar(0.6); // Darken cooked food
                 if (content.name === 'meat') color.setHex(0x8B4513); // Cooked meat color
             } else if (content.chopped) {
-                // SPECIAL LOGIC: PINK FISH FOR SUSHI
-                if (content.name === 'fish') color.setHex(0xFFB6C1); // Light Pink (Salmon/Sashimi)
+                if (content.name === 'fish') color.setHex(0xFFB6C1);
             }
 
             const mat = new THREE.MeshStandardMaterial({
@@ -2670,17 +2840,17 @@ export class KitchenRenderer {
                 } else if (content.name === 'tomato') {
                     // Realistic tomato with segments
                     const tomatoGroup = new THREE.Group();
-                    
+
                     // Main tomato body
                     const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 32, 32), mat);
                     body.scale.y = 0.9;
                     tomatoGroup.add(body);
-                    
+
                     // Tomato segments (vertical indentations)
                     for (let seg = 0; seg < 6; seg++) {
                         const segment = new THREE.Mesh(
                             new THREE.BoxGeometry(0.02, 0.5, 0.02),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xC0392B,
                                 roughness: 0.8
                             })
@@ -2694,7 +2864,7 @@ export class KitchenRenderer {
                         segment.rotation.y = angle;
                         tomatoGroup.add(segment);
                     }
-                    
+
                     // Green stem/calyx (star shape on top)
                     const stemMat = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.9 });
                     const stemBase = new THREE.Mesh(
@@ -2703,7 +2873,7 @@ export class KitchenRenderer {
                     );
                     stemBase.position.y = 0.25;
                     tomatoGroup.add(stemBase);
-                    
+
                     // Calyx leaves (5 pointed star)
                     for (let cl = 0; cl < 5; cl++) {
                         const leaf = new THREE.Mesh(
@@ -2723,11 +2893,11 @@ export class KitchenRenderer {
                         );
                         tomatoGroup.add(leaf);
                     }
-                    
+
                     // Highlight spot (shiny reflection)
                     const highlight = new THREE.Mesh(
                         new THREE.SphereGeometry(0.06, 12, 12),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: 0xFF6B6B,
                             roughness: 0.1,
                             metalness: 0.3
@@ -2735,22 +2905,22 @@ export class KitchenRenderer {
                     );
                     highlight.position.set(-0.15, 0.15, 0.15);
                     tomatoGroup.add(highlight);
-                    
+
                     mesh.add(tomatoGroup);
                 } else if (content.name === 'onion') {
                     // Realistic onion with layers and roots
                     const onionGroup = new THREE.Group();
-                    
+
                     // Main onion body (slightly elongated)
                     const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 32, 32), mat);
                     body.scale.set(1, 1.1, 1);
                     onionGroup.add(body);
-                    
+
                     // Onion layers (rings showing through)
                     for (let layer = 0; layer < 4; layer++) {
                         const ring = new THREE.Mesh(
                             new THREE.TorusGeometry(0.24 - layer * 0.04, 0.008, 12, 32),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xE8D5B7,
                                 roughness: 0.8,
                                 transparent: true,
@@ -2761,12 +2931,12 @@ export class KitchenRenderer {
                         ring.position.y = 0.05 + layer * 0.08;
                         onionGroup.add(ring);
                     }
-                    
+
                     // Papery skin texture (outer layer)
                     for (let skin = 0; skin < 3; skin++) {
                         const paper = new THREE.Mesh(
                             new THREE.PlaneGeometry(0.15, 0.2),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0xD4A574,
                                 roughness: 0.95,
                                 side: THREE.DoubleSide,
@@ -2787,7 +2957,7 @@ export class KitchenRenderer {
                         );
                         onionGroup.add(paper);
                     }
-                    
+
                     // Green sprout on top
                     const sproutMat = new THREE.MeshStandardMaterial({ color: 0x7CB342, roughness: 0.8 });
                     for (let sp = 0; sp < 2; sp++) {
@@ -2807,7 +2977,7 @@ export class KitchenRenderer {
                         );
                         onionGroup.add(sprout);
                     }
-                    
+
                     // Root base (bottom)
                     const rootMat = new THREE.MeshStandardMaterial({ color: 0x8B7355, roughness: 0.95 });
                     const rootBase = new THREE.Mesh(
@@ -2816,7 +2986,7 @@ export class KitchenRenderer {
                     );
                     rootBase.position.y = -0.29;
                     onionGroup.add(rootBase);
-                    
+
                     // Root hairs
                     for (let rh = 0; rh < 8; rh++) {
                         const hair = new THREE.Mesh(
@@ -2836,34 +3006,34 @@ export class KitchenRenderer {
                         );
                         onionGroup.add(hair);
                     }
-                    
+
                     mesh.add(onionGroup);
                 } else if (content.name === 'lettuce') {
                     // Realistic lettuce head with multiple leaves
                     const lettuceGroup = new THREE.Group();
-                    const lettuceMat = new THREE.MeshStandardMaterial({ 
-                        color: mat.color, 
+                    const lettuceMat = new THREE.MeshStandardMaterial({
+                        color: mat.color,
                         roughness: 0.9,
                         side: THREE.DoubleSide
                     });
-                    
+
                     // Core/center
                     const core = new THREE.Mesh(
                         new THREE.SphereGeometry(0.12, 16, 16),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: content.burnt ? 0x000000 : 0xC8E6C9,
                             roughness: 0.8
                         })
                     );
                     core.scale.y = 0.6;
                     lettuceGroup.add(core);
-                    
+
                     // Multiple layers of leaves
                     for (let layer = 0; layer < 3; layer++) {
                         const numLeaves = 6 + layer * 2;
                         const leafSize = 0.2 + layer * 0.08;
                         const leafHeight = -0.05 + layer * 0.04;
-                        
+
                         for (let lf = 0; lf < numLeaves; lf++) {
                             const leaf = new THREE.Mesh(
                                 new THREE.PlaneGeometry(leafSize, leafSize * 1.2),
@@ -2871,7 +3041,7 @@ export class KitchenRenderer {
                             );
                             const angle = (lf / numLeaves) * Math.PI * 2 + layer * 0.3;
                             const radius = 0.08 + layer * 0.06;
-                            
+
                             leaf.position.set(
                                 Math.cos(angle) * radius,
                                 leafHeight,
@@ -2882,20 +3052,20 @@ export class KitchenRenderer {
                                 angle + (Math.random() - 0.5) * 0.3,
                                 (Math.random() - 0.5) * 0.5
                             );
-                            
+
                             // Add some curl/wave to leaves
                             leaf.scale.set(
                                 1 + (Math.random() - 0.5) * 0.2,
                                 1 + (Math.random() - 0.5) * 0.3,
                                 1
                             );
-                            
+
                             lettuceGroup.add(leaf);
-                            
+
                             // Leaf veins (lighter green)
                             const vein = new THREE.Mesh(
                                 new THREE.PlaneGeometry(0.015, leafSize * 0.9),
-                                new THREE.MeshStandardMaterial({ 
+                                new THREE.MeshStandardMaterial({
                                     color: 0x81C784,
                                     side: THREE.DoubleSide
                                 })
@@ -2905,7 +3075,7 @@ export class KitchenRenderer {
                             lettuceGroup.add(vein);
                         }
                     }
-                    
+
                     mesh.add(lettuceGroup);
                 } else if (content.name === 'cheese') {
                     const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.25, 3), mat);
@@ -2914,7 +3084,7 @@ export class KitchenRenderer {
                 } else if (content.name === 'bread') {
                     // Realistic bread bun with texture
                     const breadGroup = new THREE.Group();
-                    
+
                     // Main bun body (rounded top)
                     const bunTop = new THREE.Mesh(
                         new THREE.SphereGeometry(0.26, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -2922,7 +3092,7 @@ export class KitchenRenderer {
                     );
                     bunTop.position.y = 0.05;
                     breadGroup.add(bunTop);
-                    
+
                     // Bottom part
                     const bunBottom = new THREE.Mesh(
                         new THREE.CylinderGeometry(0.26, 0.24, 0.1, 32),
@@ -2930,12 +3100,12 @@ export class KitchenRenderer {
                     );
                     bunBottom.position.y = -0.05;
                     breadGroup.add(bunBottom);
-                    
+
                     // Texture lines (scoring marks)
                     for (let line = 0; line < 4; line++) {
                         const score = new THREE.Mesh(
                             new THREE.TorusGeometry(0.22 - line * 0.03, 0.005, 8, 32),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xC49A6C,
                                 roughness: 0.8
                             })
@@ -2944,11 +3114,11 @@ export class KitchenRenderer {
                         score.position.y = 0.08 + line * 0.04;
                         breadGroup.add(score);
                     }
-                    
+
                     // Sesame seeds on top
-                    const seedMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFFACD, 
-                        roughness: 0.8 
+                    const seedMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFFACD,
+                        roughness: 0.8
                     });
                     for (let seed = 0; seed < 15; seed++) {
                         const s = new THREE.Mesh(
@@ -2966,12 +3136,12 @@ export class KitchenRenderer {
                         s.rotation.y = Math.random() * Math.PI;
                         breadGroup.add(s);
                     }
-                    
+
                     // Flour dusting (white spots)
                     for (let flour = 0; flour < 8; flour++) {
                         const dust = new THREE.Mesh(
                             new THREE.CircleGeometry(0.02 + Math.random() * 0.02, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0xFFFFF0,
                                 transparent: true,
                                 opacity: 0.5,
@@ -2992,12 +3162,12 @@ export class KitchenRenderer {
                         );
                         breadGroup.add(dust);
                     }
-                    
+
                     mesh.add(breadGroup);
                 } else if (content.name === 'dough') {
                     // Soft pillowy dough ball with flour
                     const doughGroup = new THREE.Group();
-                    
+
                     // Main dough body (soft and puffy)
                     const doughBall = new THREE.Mesh(
                         new THREE.SphereGeometry(0.24, 24, 16),
@@ -3005,12 +3175,12 @@ export class KitchenRenderer {
                     );
                     doughBall.scale.set(1, 0.7, 1);
                     doughGroup.add(doughBall);
-                    
+
                     // Dough folds/creases
                     for (let fold = 0; fold < 4; fold++) {
                         const crease = new THREE.Mesh(
                             new THREE.TorusGeometry(0.18 - fold * 0.03, 0.008, 8, 24),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xE8D5B7,
                                 roughness: 0.9
                             })
@@ -3019,15 +3189,15 @@ export class KitchenRenderer {
                         crease.position.y = -0.05 + fold * 0.03;
                         doughGroup.add(crease);
                     }
-                    
+
                     // Flour coating (white dusting all over)
-                    const flourMat = new THREE.MeshStandardMaterial({ 
+                    const flourMat = new THREE.MeshStandardMaterial({
                         color: 0xFFFFF0,
                         transparent: true,
                         opacity: 0.6,
                         roughness: 1.0
                     });
-                    
+
                     for (let flour = 0; flour < 20; flour++) {
                         const dust = new THREE.Mesh(
                             new THREE.SphereGeometry(0.015 + Math.random() * 0.01, 8, 6),
@@ -3043,12 +3213,12 @@ export class KitchenRenderer {
                         );
                         doughGroup.add(dust);
                     }
-                    
+
                     // Dough texture bumps (air bubbles)
                     for (let bump = 0; bump < 6; bump++) {
                         const bubble = new THREE.Mesh(
                             new THREE.SphereGeometry(0.03 + Math.random() * 0.02, 12, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: mat.color,
                                 roughness: 0.85
                             })
@@ -3062,12 +3232,12 @@ export class KitchenRenderer {
                         );
                         doughGroup.add(bubble);
                     }
-                    
+
                     mesh.add(doughGroup);
                 } else if (content.name === 'rice') {
                     // Realistic rice pile with individual grains
                     const riceGroup = new THREE.Group();
-                    
+
                     // Base mound shape
                     const base = new THREE.Mesh(
                         new THREE.SphereGeometry(0.22, 24, 16),
@@ -3076,40 +3246,40 @@ export class KitchenRenderer {
                     base.scale.set(1, 0.5, 1);
                     base.position.y = -0.05;
                     riceGroup.add(base);
-                    
+
                     // Individual rice grains on surface (lots of them)
-                    const grainMat = new THREE.MeshStandardMaterial({ 
+                    const grainMat = new THREE.MeshStandardMaterial({
                         color: content.burnt ? 0x000000 : 0xFFFFF0,
                         roughness: 0.9
                     });
-                    
+
                     for (let grain = 0; grain < 40; grain++) {
                         const g = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.008, 0.008, 0.025, 6),
                             grainMat
                         );
-                        
+
                         // Random position on mound surface
                         const angle = Math.random() * Math.PI * 2;
                         const radius = Math.random() * 0.2;
                         const height = Math.sqrt(1 - (radius / 0.22) ** 2) * 0.11;
-                        
+
                         g.position.set(
                             Math.cos(angle) * radius,
                             height - 0.05,
                             Math.sin(angle) * radius
                         );
-                        
+
                         // Random rotation for natural look
                         g.rotation.set(
                             (Math.random() - 0.5) * Math.PI,
                             Math.random() * Math.PI * 2,
                             (Math.random() - 0.5) * Math.PI
                         );
-                        
+
                         riceGroup.add(g);
                     }
-                    
+
                     // Rice grain clusters (clumps)
                     for (let cluster = 0; cluster < 8; cluster++) {
                         const clump = new THREE.Mesh(
@@ -3130,13 +3300,13 @@ export class KitchenRenderer {
                         );
                         riceGroup.add(clump);
                     }
-                    
+
                     // Steam if cooked
                     if (content.cooked) {
                         // Add subtle shine to cooked rice
                         const shine = new THREE.Mesh(
                             new THREE.SphereGeometry(0.15, 16, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0xFFFFFF,
                                 transparent: true,
                                 opacity: 0.2,
@@ -3148,7 +3318,7 @@ export class KitchenRenderer {
                         shine.position.y = 0.02;
                         riceGroup.add(shine);
                     }
-                    
+
                     mesh.add(riceGroup);
                 } else {
                     mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.25, 20, 20), mat));
@@ -3202,7 +3372,7 @@ export class KitchenRenderer {
                 const bottomBun = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.4, 0.12, 32), bunMat);
                 bottomBun.position.y = layerY;
                 group.add(bottomBun);
-                
+
                 // Bottom bun texture lines
                 for (let bl = 0; bl < 4; bl++) {
                     const line = new THREE.Mesh(
@@ -3222,7 +3392,7 @@ export class KitchenRenderer {
                     const patty = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.37, 0.1, 32), pattyMat);
                     patty.position.y = layerY;
                     group.add(patty);
-                    
+
                     // Grill marks (more realistic)
                     for (let gm = 0; gm < 4; gm++) {
                         const mark = new THREE.Mesh(
@@ -3233,7 +3403,7 @@ export class KitchenRenderer {
                         mark.rotation.y = Math.PI / 6;
                         group.add(mark);
                     }
-                    
+
                     // Juicy edges effect
                     const juiceRing = new THREE.Mesh(
                         new THREE.TorusGeometry(0.36, 0.008, 8, 32),
@@ -3248,18 +3418,18 @@ export class KitchenRenderer {
                 // Lettuce layer (more realistic wavy leaves)
                 if (hasLettuce) {
                     const lettuceColor = content.burnt ? 0x000000 : 0x27ae60;
-                    const lettuceMat = new THREE.MeshStandardMaterial({ 
-                        color: lettuceColor, 
-                        roughness: 0.9, 
-                        side: THREE.DoubleSide 
+                    const lettuceMat = new THREE.MeshStandardMaterial({
+                        color: lettuceColor,
+                        roughness: 0.9,
+                        side: THREE.DoubleSide
                     });
                     // Multiple wavy lettuce leaves
                     for (let lf = 0; lf < 5; lf++) {
                         const leaf = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.18), lettuceMat);
                         const angle = (lf / 5) * Math.PI * 2;
                         leaf.position.set(
-                            Math.cos(angle) * 0.14, 
-                            layerY + 0.02 + Math.random() * 0.02, 
+                            Math.cos(angle) * 0.14,
+                            layerY + 0.02 + Math.random() * 0.02,
                             Math.sin(angle) * 0.14
                         );
                         leaf.rotation.set(-Math.PI / 2.5 + Math.random() * 0.3, angle, Math.random() * 0.4);
@@ -3273,13 +3443,13 @@ export class KitchenRenderer {
                     const tomatoColor = content.burnt ? 0x000000 : 0xe74c3c;
                     const tomatoMat = new THREE.MeshStandardMaterial({ color: tomatoColor, roughness: 0.4 });
                     const seedMat = new THREE.MeshStandardMaterial({ color: 0xFFE4B5, roughness: 0.6 });
-                    
+
                     // Two tomato slices
                     for (let ts = 0; ts < 2; ts++) {
                         const slice = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.04, 24), tomatoMat);
                         slice.position.set((ts - 0.5) * 0.15, layerY, ts * 0.08);
                         group.add(slice);
-                        
+
                         // Seeds in center
                         for (let sd = 0; sd < 4; sd++) {
                             const seed = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 6), seedMat);
@@ -3332,15 +3502,15 @@ export class KitchenRenderer {
                 group.add(pizzaBase);
 
                 // Raised crust edge (puffy and golden)
-                const crustMat = new THREE.MeshStandardMaterial({ 
-                    color: content.burnt ? 0x000000 : 0xD4A574, 
-                    roughness: 0.7 
+                const crustMat = new THREE.MeshStandardMaterial({
+                    color: content.burnt ? 0x000000 : 0xD4A574,
+                    roughness: 0.7
                 });
                 const crust = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.05, 12, 48), crustMat);
                 crust.rotation.x = Math.PI / 2;
                 crust.position.y = layerY + 0.04;
                 group.add(crust);
-                
+
                 // Crust bubbles for realism
                 for (let cb = 0; cb < 6; cb++) {
                     const bubble = new THREE.Mesh(
@@ -3366,7 +3536,7 @@ export class KitchenRenderer {
                     );
                     sauce.position.y = layerY;
                     group.add(sauce);
-                    
+
                     // Sauce texture (herb specks)
                     for (let hs = 0; hs < 8; hs++) {
                         const herb = new THREE.Mesh(
@@ -3389,12 +3559,12 @@ export class KitchenRenderer {
                 // Cheese layer (shredded/sprinkled cheese)
                 if (hasCheese) {
                     const cheeseColor = content.burnt ? 0x000000 : 0xf1c40f;
-                    const cheeseMat = new THREE.MeshStandardMaterial({ 
-                        color: cheeseColor, 
+                    const cheeseMat = new THREE.MeshStandardMaterial({
+                        color: cheeseColor,
                         roughness: 0.6,
                         metalness: 0.05
                     });
-                    
+
                     // Shredded cheese pieces scattered on pizza
                     for (let shred = 0; shred < 35; shred++) {
                         const shredPiece = new THREE.Mesh(
@@ -3405,7 +3575,7 @@ export class KitchenRenderer {
                             ),
                             cheeseMat
                         );
-                        
+
                         // Random position across pizza surface
                         const angle = Math.random() * Math.PI * 2;
                         const radius = Math.random() * 0.35;
@@ -3414,24 +3584,24 @@ export class KitchenRenderer {
                             layerY + 0.008 + Math.random() * 0.015,
                             Math.sin(angle) * radius
                         );
-                        
+
                         // Random rotation for natural scattered look
                         shredPiece.rotation.set(
                             (Math.random() - 0.5) * 0.5,
                             Math.random() * Math.PI * 2,
                             (Math.random() - 0.5) * 0.5
                         );
-                        
+
                         group.add(shredPiece);
                     }
-                    
+
                     // Some melted cheese spots (golden brown when cooked)
                     if (content.cooked && content.cooked.includes('dough')) {
                         for (let melt = 0; melt < 6; melt++) {
                             const meltSpot = new THREE.Mesh(
                                 new THREE.CylinderGeometry(0.06, 0.07, 0.006, 16),
-                                new THREE.MeshStandardMaterial({ 
-                                    color: 0xFFD700, 
+                                new THREE.MeshStandardMaterial({
+                                    color: 0xFFD700,
                                     roughness: 0.3,
                                     metalness: 0.2
                                 })
@@ -3446,7 +3616,7 @@ export class KitchenRenderer {
                             group.add(meltSpot);
                         }
                     }
-                    
+
                     layerY += 0.025;
                 }
                 finalHeight = layerY;
@@ -3460,7 +3630,7 @@ export class KitchenRenderer {
                 // Sushi rice base (realistic nigiri shape)
                 const riceColor = content.burnt ? 0x000000 : 0xFFFAFA;
                 const riceMat = new THREE.MeshStandardMaterial({ color: riceColor, roughness: 0.9 });
-                
+
                 // Three nigiri pieces
                 for (let s = 0; s < 3; s++) {
                     // Rice base (oval mound)
@@ -3469,7 +3639,7 @@ export class KitchenRenderer {
                     // Round the edges
                     riceBase.scale.set(1, 1, 0.9);
                     group.add(riceBase);
-                    
+
                     // Rice grain texture
                     for (let rg = 0; rg < 8; rg++) {
                         const grain = new THREE.Mesh(
@@ -3486,8 +3656,8 @@ export class KitchenRenderer {
 
                     // Fish slice on top (salmon pink)
                     const fishColor = content.burnt ? 0x000000 : 0xFA8072;
-                    const fishMat = new THREE.MeshStandardMaterial({ 
-                        color: fishColor, 
+                    const fishMat = new THREE.MeshStandardMaterial({
+                        color: fishColor,
                         roughness: 0.3,
                         metalness: 0.1
                     });
@@ -3495,7 +3665,7 @@ export class KitchenRenderer {
                     fishSlice.position.set((s - 1) * 0.32, layerY + 0.14, 0);
                     fishSlice.rotation.y = Math.random() * 0.2 - 0.1;
                     group.add(fishSlice);
-                    
+
                     // Fish marbling (white fat lines)
                     for (let fm = 0; fm < 2; fm++) {
                         const marble = new THREE.Mesh(
@@ -3517,7 +3687,7 @@ export class KitchenRenderer {
                 const nori = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.24), noriMat);
                 nori.position.set(-0.32, layerY + 0.09, 0);
                 group.add(nori);
-                
+
                 // Wasabi dollop (green paste)
                 const wasabi = new THREE.Mesh(
                     new THREE.SphereGeometry(0.04, 12, 8),
@@ -3526,13 +3696,13 @@ export class KitchenRenderer {
                 wasabi.scale.set(1, 0.6, 1);
                 wasabi.position.set(0.35, layerY + 0.02, 0.15);
                 group.add(wasabi);
-                
+
                 // Pickled ginger slices (pink)
                 for (let pg = 0; pg < 2; pg++) {
                     const ginger = new THREE.Mesh(
                         new THREE.PlaneGeometry(0.12, 0.08),
-                        new THREE.MeshStandardMaterial({ 
-                            color: 0xFFB6C1, 
+                        new THREE.MeshStandardMaterial({
+                            color: 0xFFB6C1,
                             roughness: 0.5,
                             side: THREE.DoubleSide
                         })
@@ -3541,7 +3711,7 @@ export class KitchenRenderer {
                     ginger.position.set(0.25 + pg * 0.08, layerY + 0.02, -0.18);
                     group.add(ginger);
                 }
-                
+
                 finalHeight = layerY + 0.18;
             }
             // ==========================================
@@ -3549,17 +3719,17 @@ export class KitchenRenderer {
             // ==========================================
             else if (hasOnion && hasMushroom && hasTomato) {
                 let layerY = 0.1;
-                
+
                 // Realistic soup bowl (wider at top, ceramic texture)
-                const bowlMat = new THREE.MeshStandardMaterial({ 
-                    color: 0xF5F5DC, 
+                const bowlMat = new THREE.MeshStandardMaterial({
+                    color: 0xF5F5DC,
                     roughness: 0.4,
                     metalness: 0.1
                 });
                 const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.32, 0.28, 32), bowlMat);
                 bowl.position.y = layerY + 0.14;
                 group.add(bowl);
-                
+
                 // Bowl rim (thicker edge)
                 const rim = new THREE.Mesh(
                     new THREE.TorusGeometry(0.45, 0.025, 12, 32),
@@ -3571,23 +3741,23 @@ export class KitchenRenderer {
 
                 // Rich tomato soup broth (glossy surface)
                 const soupColor = content.burnt ? 0x000000 : 0xD32F2F;
-                const soupMat = new THREE.MeshStandardMaterial({ 
-                    color: soupColor, 
-                    roughness: 0.15, 
-                    metalness: 0.2 
+                const soupMat = new THREE.MeshStandardMaterial({
+                    color: soupColor,
+                    roughness: 0.15,
+                    metalness: 0.2
                 });
                 const broth = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.40, 0.03, 32), soupMat);
                 broth.position.y = layerY + 0.26;
                 group.add(broth);
-                
+
                 // Soup surface ripples
                 for (let rp = 0; rp < 3; rp++) {
                     const ripple = new THREE.Mesh(
                         new THREE.TorusGeometry(0.15 + rp * 0.08, 0.008, 8, 24),
-                        new THREE.MeshStandardMaterial({ 
-                            color: 0xFF6B6B, 
-                            transparent: true, 
-                            opacity: 0.3 - rp * 0.1 
+                        new THREE.MeshStandardMaterial({
+                            color: 0xFF6B6B,
+                            transparent: true,
+                            opacity: 0.3 - rp * 0.1
                         })
                     );
                     ripple.rotation.x = Math.PI / 2;
@@ -3600,7 +3770,7 @@ export class KitchenRenderer {
                     for (let tc = 0; tc < 5; tc++) {
                         const chunk = new THREE.Mesh(
                             new THREE.BoxGeometry(0.06, 0.04, 0.06),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xFF5252,
                                 roughness: 0.6
                             })
@@ -3620,13 +3790,13 @@ export class KitchenRenderer {
                         group.add(chunk);
                     }
                 }
-                
+
                 // Caramelized onion slices
                 if (hasOnion) {
                     for (let os = 0; os < 4; os++) {
                         const onionSlice = new THREE.Mesh(
                             new THREE.TorusGeometry(0.05, 0.018, 8, 16),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xD4A574,
                                 roughness: 0.7
                             })
@@ -3642,14 +3812,14 @@ export class KitchenRenderer {
                         group.add(onionSlice);
                     }
                 }
-                
+
                 // Mushroom slices (realistic caps)
                 if (hasMushroom) {
                     for (let ms = 0; ms < 4; ms++) {
                         // Mushroom cap
                         const cap = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.045, 0.055, 0.025, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0x8B7355,
                                 roughness: 0.8
                             })
@@ -3667,7 +3837,7 @@ export class KitchenRenderer {
                             (Math.random() - 0.5) * 0.6
                         );
                         group.add(cap);
-                        
+
                         // Mushroom gills (underside detail)
                         const gills = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.04, 0.05, 0.015, 12),
@@ -3679,13 +3849,13 @@ export class KitchenRenderer {
                         group.add(gills);
                     }
                 }
-                
+
                 // Fresh herbs on top (parsley garnish)
                 for (let hb = 0; hb < 3; hb++) {
                     const herb = new THREE.Mesh(
                         new THREE.PlaneGeometry(0.08, 0.05),
-                        new THREE.MeshStandardMaterial({ 
-                            color: 0x2E7D32, 
+                        new THREE.MeshStandardMaterial({
+                            color: 0x2E7D32,
                             side: THREE.DoubleSide,
                             roughness: 0.9
                         })
@@ -3700,7 +3870,7 @@ export class KitchenRenderer {
                     );
                     group.add(herb);
                 }
-                
+
                 finalHeight = layerY + 0.32;
             }
             // ==========================================
@@ -3711,12 +3881,12 @@ export class KitchenRenderer {
 
                 // Folded omelette base (realistic half-moon shape)
                 const eggColor = content.burnt ? 0x000000 : 0xFFE66D;
-                const eggMat = new THREE.MeshStandardMaterial({ 
-                    color: eggColor, 
+                const eggMat = new THREE.MeshStandardMaterial({
+                    color: eggColor,
                     roughness: 0.5,
                     metalness: 0.1
                 });
-                
+
                 // Main omelette body (half cylinder for folded look)
                 const omelette = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.38, 0.38, 0.12, 32, 1, false, 0, Math.PI),
@@ -3725,13 +3895,13 @@ export class KitchenRenderer {
                 omelette.rotation.z = Math.PI / 2;
                 omelette.position.y = layerY + 0.06;
                 group.add(omelette);
-                
+
                 // Omelette surface texture (slightly browned spots)
                 if (!content.burnt) {
                     for (let bs = 0; bs < 6; bs++) {
                         const brownSpot = new THREE.Mesh(
                             new THREE.CircleGeometry(0.04 + Math.random() * 0.03, 16),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0xD4A574,
                                 transparent: true,
                                 opacity: 0.6
@@ -3749,12 +3919,12 @@ export class KitchenRenderer {
 
                 // Cheese filling visible at opening (melted and gooey)
                 if (hasCheese) {
-                    const cheeseMat = new THREE.MeshStandardMaterial({ 
+                    const cheeseMat = new THREE.MeshStandardMaterial({
                         color: content.burnt ? 0x000000 : 0xFFD700,
                         roughness: 0.3,
                         metalness: 0.2
                     });
-                    
+
                     // Melted cheese oozing out
                     const cheeseOoze = new THREE.Mesh(
                         new THREE.SphereGeometry(0.12, 16, 12),
@@ -3763,7 +3933,7 @@ export class KitchenRenderer {
                     cheeseOoze.scale.set(1.2, 0.4, 0.8);
                     cheeseOoze.position.set(0.25, layerY + 0.05, 0);
                     group.add(cheeseOoze);
-                    
+
                     // Cheese drip
                     const drip = new THREE.Mesh(
                         new THREE.CylinderGeometry(0.02, 0.03, 0.06, 8),
@@ -3779,7 +3949,7 @@ export class KitchenRenderer {
                         // Mushroom cap
                         const cap = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.035, 0.045, 0.025, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0x8B7355,
                                 roughness: 0.8
                             })
@@ -3797,7 +3967,7 @@ export class KitchenRenderer {
                         group.add(cap);
                     }
                 }
-                
+
                 // Fresh herbs on top (chives)
                 for (let ch = 0; ch < 4; ch++) {
                     const chive = new THREE.Mesh(
@@ -3816,7 +3986,7 @@ export class KitchenRenderer {
                     );
                     group.add(chive);
                 }
-                
+
                 finalHeight = layerY + 0.15;
             }
             // ==========================================
@@ -3827,12 +3997,12 @@ export class KitchenRenderer {
 
                 // Lettuce bed (realistic wavy leaves in bowl shape)
                 const letColor = content.burnt ? 0x000000 : 0x27ae60;
-                const letMat = new THREE.MeshStandardMaterial({ 
-                    color: letColor, 
-                    roughness: 0.9, 
-                    side: THREE.DoubleSide 
+                const letMat = new THREE.MeshStandardMaterial({
+                    color: letColor,
+                    roughness: 0.9,
+                    side: THREE.DoubleSide
                 });
-                
+
                 // Multiple lettuce leaves with curves
                 for (let lf = 0; lf < 7; lf++) {
                     const leaf = new THREE.Mesh(
@@ -3851,13 +4021,13 @@ export class KitchenRenderer {
                         (Math.random() - 0.5) * 0.5
                     );
                     group.add(leaf);
-                    
+
                     // Leaf veins (lighter green)
                     const vein = new THREE.Mesh(
                         new THREE.PlaneGeometry(0.02, 0.18),
-                        new THREE.MeshStandardMaterial({ 
-                            color: 0x4CAF50, 
-                            side: THREE.DoubleSide 
+                        new THREE.MeshStandardMaterial({
+                            color: 0x4CAF50,
+                            side: THREE.DoubleSide
                         })
                     );
                     vein.position.copy(leaf.position);
@@ -3871,7 +4041,7 @@ export class KitchenRenderer {
                     for (let ct = 0; ct < 4; ct++) {
                         const tomato = new THREE.Mesh(
                             new THREE.SphereGeometry(0.055, 12, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: tColor,
                                 roughness: 0.4,
                                 metalness: 0.1
@@ -3885,7 +4055,7 @@ export class KitchenRenderer {
                             Math.sin(angle) * radius
                         );
                         group.add(tomato);
-                        
+
                         // Tomato stem (green)
                         const stem = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.008, 0.012, 0.025, 6),
@@ -3904,7 +4074,7 @@ export class KitchenRenderer {
                         // Outer ring
                         const outerRing = new THREE.Mesh(
                             new THREE.TorusGeometry(0.06, 0.015, 8, 16),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: oColor,
                                 roughness: 0.7
                             })
@@ -3918,7 +4088,7 @@ export class KitchenRenderer {
                             Math.sin(angle) * 0.2
                         );
                         group.add(outerRing);
-                        
+
                         // Inner ring
                         const innerRing = new THREE.Mesh(
                             new THREE.TorusGeometry(0.035, 0.012, 8, 16),
@@ -3929,12 +4099,12 @@ export class KitchenRenderer {
                         group.add(innerRing);
                     }
                 }
-                
+
                 // Cucumber slices (if we had cucumber, but using as decoration)
                 for (let cs = 0; cs < 3; cs++) {
                     const cucumber = new THREE.Mesh(
                         new THREE.CylinderGeometry(0.05, 0.05, 0.015, 16),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: 0x8BC34A,
                             roughness: 0.6
                         })
@@ -3947,7 +4117,7 @@ export class KitchenRenderer {
                     );
                     cucumber.rotation.x = Math.PI / 2;
                     group.add(cucumber);
-                    
+
                     // Cucumber seeds (center)
                     const seeds = new THREE.Mesh(
                         new THREE.CircleGeometry(0.025, 12),
@@ -3958,7 +4128,7 @@ export class KitchenRenderer {
                     seeds.rotation.x = -Math.PI / 2;
                     group.add(seeds);
                 }
-                
+
                 finalHeight = layerY + 0.18;
             }
             // ==========================================
@@ -3966,14 +4136,14 @@ export class KitchenRenderer {
             // ==========================================
             else if (hasFish && hasBread && hasLettuce && hasTomato) {
                 let layerY = 0.1;
-                
+
                 // Three taco shells (folded tortillas)
                 const breadColor = content.burnt ? 0x000000 : 0xF4A460;
-                const breadMat = new THREE.MeshStandardMaterial({ 
-                    color: breadColor, 
-                    roughness: 0.8 
+                const breadMat = new THREE.MeshStandardMaterial({
+                    color: breadColor,
+                    roughness: 0.8
                 });
-                
+
                 for (let t = 0; t < 3; t++) {
                     // Taco shell (half cylinder for folded tortilla)
                     const shell = new THREE.Mesh(
@@ -3983,12 +4153,12 @@ export class KitchenRenderer {
                     shell.rotation.z = Math.PI / 2;
                     shell.position.set((t - 1) * 0.35, layerY + 0.09, 0);
                     group.add(shell);
-                    
+
                     // Tortilla texture (grill marks)
                     for (let gm = 0; gm < 3; gm++) {
                         const grillMark = new THREE.Mesh(
                             new THREE.PlaneGeometry(0.25, 0.015),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: 0x8B4513,
                                 transparent: true,
                                 opacity: 0.5
@@ -4006,14 +4176,14 @@ export class KitchenRenderer {
                         );
                         group.add(grillMark);
                     }
-                    
+
                     // Cooked fish pieces (flaky white fish)
                     if (hasFish) {
                         const fishColor = content.burnt ? 0x000000 : 0xFFFAF0;
                         for (let fp = 0; fp < 2; fp++) {
                             const fishPiece = new THREE.Mesh(
                                 new THREE.BoxGeometry(0.12, 0.04, 0.08),
-                                new THREE.MeshStandardMaterial({ 
+                                new THREE.MeshStandardMaterial({
                                     color: fishColor,
                                     roughness: 0.7
                                 })
@@ -4025,7 +4195,7 @@ export class KitchenRenderer {
                             );
                             fishPiece.rotation.y = (Math.random() - 0.5) * 0.4;
                             group.add(fishPiece);
-                            
+
                             // Fish flakes texture
                             for (let ff = 0; ff < 3; ff++) {
                                 const flake = new THREE.Mesh(
@@ -4042,13 +4212,13 @@ export class KitchenRenderer {
                             }
                         }
                     }
-                    
+
                     // Shredded lettuce (green)
                     if (hasLettuce) {
                         for (let sl = 0; sl < 4; sl++) {
                             const shred = new THREE.Mesh(
                                 new THREE.PlaneGeometry(0.08, 0.04),
-                                new THREE.MeshStandardMaterial({ 
+                                new THREE.MeshStandardMaterial({
                                     color: 0x7CB342,
                                     side: THREE.DoubleSide,
                                     roughness: 0.9
@@ -4067,13 +4237,13 @@ export class KitchenRenderer {
                             group.add(shred);
                         }
                     }
-                    
+
                     // Diced tomatoes (red chunks)
                     if (hasTomato) {
                         for (let dt = 0; dt < 3; dt++) {
                             const dice = new THREE.Mesh(
                                 new THREE.BoxGeometry(0.03, 0.03, 0.03),
-                                new THREE.MeshStandardMaterial({ 
+                                new THREE.MeshStandardMaterial({
                                     color: 0xFF5252,
                                     roughness: 0.6
                                 })
@@ -4087,11 +4257,11 @@ export class KitchenRenderer {
                         }
                     }
                 }
-                
+
                 // Lime wedge garnish
                 const lime = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ 
+                    new THREE.MeshStandardMaterial({
                         color: 0x9CCC65,
                         roughness: 0.5
                     })
@@ -4100,7 +4270,7 @@ export class KitchenRenderer {
                 lime.rotation.y = Math.PI / 4;
                 lime.position.set(0.45, layerY + 0.02, 0.15);
                 group.add(lime);
-                
+
                 finalHeight = layerY + 0.18;
             }
             // ==========================================
@@ -4108,15 +4278,15 @@ export class KitchenRenderer {
             // ==========================================
             else if (hasMeat && hasMushroom && hasOnion && !hasBread) {
                 let layerY = 0.1;
-                
+
                 // Grilled steak (center piece)
                 const steakColor = content.burnt ? 0x000000 : 0x8B4513;
-                const steakMat = new THREE.MeshStandardMaterial({ 
-                    color: steakColor, 
+                const steakMat = new THREE.MeshStandardMaterial({
+                    color: steakColor,
                     roughness: 0.6,
                     metalness: 0.1
                 });
-                
+
                 // Main steak body
                 const steak = new THREE.Mesh(
                     new THREE.BoxGeometry(0.35, 0.08, 0.25),
@@ -4124,7 +4294,7 @@ export class KitchenRenderer {
                 );
                 steak.position.set(0, layerY + 0.04, 0);
                 group.add(steak);
-                
+
                 // Steak grill marks (charred lines)
                 if (!content.burnt) {
                     for (let gm = 0; gm < 4; gm++) {
@@ -4140,7 +4310,7 @@ export class KitchenRenderer {
                         grillMark.rotation.y = Math.PI / 6;
                         group.add(grillMark);
                     }
-                    
+
                     // Cross-hatch grill marks
                     for (let gm2 = 0; gm2 < 4; gm2++) {
                         const grillMark2 = new THREE.Mesh(
@@ -4155,11 +4325,11 @@ export class KitchenRenderer {
                         grillMark2.rotation.y = -Math.PI / 6;
                         group.add(grillMark2);
                     }
-                    
+
                     // Juicy center (pink/red for medium rare)
                     const juice = new THREE.Mesh(
                         new THREE.BoxGeometry(0.3, 0.04, 0.2),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: 0xC62828,
                             roughness: 0.3,
                             metalness: 0.2
@@ -4168,14 +4338,14 @@ export class KitchenRenderer {
                     juice.position.set(0, layerY + 0.04, 0);
                     group.add(juice);
                 }
-                
+
                 // Sautéed mushrooms (golden brown)
                 if (hasMushroom) {
                     for (let sm = 0; sm < 5; sm++) {
                         // Mushroom cap
                         const cap = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.05, 0.06, 0.035, 12),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xA0826D,
                                 roughness: 0.5,
                                 metalness: 0.1
@@ -4194,7 +4364,7 @@ export class KitchenRenderer {
                             (Math.random() - 0.5) * 0.4
                         );
                         group.add(cap);
-                        
+
                         // Mushroom stem
                         const stem = new THREE.Mesh(
                             new THREE.CylinderGeometry(0.02, 0.025, 0.04, 8),
@@ -4205,13 +4375,13 @@ export class KitchenRenderer {
                         group.add(stem);
                     }
                 }
-                
+
                 // Caramelized onions (golden brown strips)
                 if (hasOnion) {
                     for (let co = 0; co < 6; co++) {
                         const onionStrip = new THREE.Mesh(
                             new THREE.BoxGeometry(0.08, 0.015, 0.04),
-                            new THREE.MeshStandardMaterial({ 
+                            new THREE.MeshStandardMaterial({
                                 color: content.burnt ? 0x000000 : 0xD4A574,
                                 roughness: 0.6,
                                 metalness: 0.1
@@ -4232,7 +4402,7 @@ export class KitchenRenderer {
                         group.add(onionStrip);
                     }
                 }
-                
+
                 // Fresh herbs (rosemary sprig)
                 for (let rs = 0; rs < 2; rs++) {
                     // Rosemary stem
@@ -4251,7 +4421,7 @@ export class KitchenRenderer {
                         0.15
                     );
                     group.add(stem);
-                    
+
                     // Rosemary needles
                     for (let rn = 0; rn < 8; rn++) {
                         const needle = new THREE.Mesh(
@@ -4270,7 +4440,7 @@ export class KitchenRenderer {
                         group.add(needle);
                     }
                 }
-                
+
                 finalHeight = layerY + 0.15;
             }
             // ==========================================
@@ -4369,6 +4539,39 @@ export class KitchenRenderer {
     animate(delta, players = null) {
         this.animTime += delta;
 
+        // Player glow effect in dark areas
+        if (players) {
+            const playerKeys = Object.keys(players);
+            if (playerKeys.length > 0) {
+                const player = players[playerKeys[0]];
+                const px = player.x !== undefined ? player.x : player.gridX * this.ts;
+                const pz = player.z !== undefined ? player.z : player.gridZ * this.ts;
+
+                // Check distance to nearest station
+                let minDistance = Infinity;
+                Object.values(this.stationMeshes).forEach(sm => {
+                    const sx = sm.group.position.x;
+                    const sz = sm.group.position.z;
+                    const d = Math.sqrt((px - sx) ** 2 + (pz - sz) ** 2);
+                    if (d < minDistance) minDistance = d;
+                });
+
+                // If far from stations (dark area), add glow light
+                if (minDistance > this.ts * 2) {
+                    if (!this.playerGlowLight) {
+                        this.playerGlowLight = new THREE.PointLight(0xffffff, 1.5, 10);
+                        this.scene.add(this.playerGlowLight);
+                    }
+                    this.playerGlowLight.position.set(px, 1.5, pz);
+                } else {
+                    if (this.playerGlowLight) {
+                        this.scene.remove(this.playerGlowLight);
+                        this.playerGlowLight = null;
+                    }
+                }
+            }
+        }
+
         // Animate station effects
         Object.entries(this.stationEffects).forEach(([id, eff]) => {
             const sm = this.stationMeshes[id];
@@ -4415,16 +4618,16 @@ export class KitchenRenderer {
 
                 // Check if this is an oven (door swings down) or freezer (lid flips up)
                 const isOven = eff.door.name === 'ovenDoor';
-                
+
                 if (isOven) {
                     // OVEN: Door swings down (positive X rotation)
                     const targetDoorAngle = playerNear ? Math.PI * 0.5 : 0; // 90 degrees down
-                    
+
                     eff.doorAngle = eff.doorAngle !== undefined ? eff.doorAngle : 0;
                     const speed = playerNear ? 4.0 : 3.0;
                     eff.doorAngle += (targetDoorAngle - eff.doorAngle) * Math.min(1, delta * speed);
                     eff.door.rotation.x = eff.doorAngle;
-                    
+
                     // Sync oven light with door angle
                     if (eff.glow && eff.glowMat) {
                         const openFactor = Math.abs(eff.doorAngle / (Math.PI * 0.5));
@@ -4655,6 +4858,35 @@ export class KitchenRenderer {
                         sm.particleGroup.remove(p);
                         sm.chopParticles.splice(i, 1);
                     }
+                }
+            }
+        });
+
+        // --- SEASONING LABEL PROXIMITY ---
+        Object.values(this.stationMeshes).forEach(sm => {
+            const label = sm.group.getObjectByName('seasoningLabel');
+            if (label) {
+                // Check if the timed rare seasoning model is currently rendered
+                const isSeasoningActive = !!sm.group.getObjectByName('rareSeasoningModel');
+
+                let playerNear = false;
+                if (isSeasoningActive && players) {
+                    const sx = sm.group.position.x;
+                    const sz = sm.group.position.z;
+                    Object.values(players).forEach(p => {
+                        const px = (p.x !== undefined) ? p.x : p.gridX * this.ts;
+                        const pz = (p.z !== undefined) ? p.z : p.gridZ * this.ts;
+                        const d = Math.sqrt((px - sx) ** 2 + (pz - sz) ** 2);
+                        if (d < this.ts * 1.5) playerNear = true;
+                    });
+                }
+
+                // Visible only if seasoning station effect is active AND player is near
+                label.visible = isSeasoningActive && playerNear;
+
+                if (label.visible) {
+                    const pulse = 1 + Math.sin(this.animTime * 4) * 0.1;
+                    label.scale.set(2.0 * pulse, 1.0 * pulse, 1);
                 }
             }
         });

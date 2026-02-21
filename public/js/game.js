@@ -7,6 +7,50 @@ const socket = io();
 let playerId = null;
 let gameConfig = null;
 let roomState = null;
+let currentUser = null;
+let currentFriends = []; // Global list of friends for identifying friends in lobby
+
+const getStatusText = (status) => {
+    switch (status) {
+        case 'online': return 'Online';
+        case 'lobby': return 'In Lobby';
+        case 'ingame': return 'In Game';
+        case 'offline': return 'Offline';
+        default: return 'Offline';
+    }
+};
+
+const getAvatarUrl = (key) => {
+    const urls = {
+        'chef_1': '/assets/avatars/chef1.jpg',
+        'chef_2': '/assets/avatars/chef2.jpg',
+        'chef_3': '/assets/avatars/chef3.jpg',
+        'chef_4': '/assets/avatars/chef4.jpg',
+        'chef_5': '/assets/avatars/chef5.jpg',
+        'chef_6': '/assets/avatars/chef6.jpg'
+    };
+    return urls[key] || urls['chef_1'];
+};
+
+window.refreshUserAvatar = () => {
+    if (!currentUser) return;
+    const userAvatarContainer = document.querySelector('.user-avatar');
+    if (userAvatarContainer) {
+        const icon = userAvatarContainer.querySelector('i');
+        const profileImageKey = currentUser.profileImage || 'chef_1';
+
+        // Hide icon if we have a profile image
+        if (icon) icon.classList.add('hidden');
+
+        let img = userAvatarContainer.querySelector('img');
+        if (!img) {
+            img = document.createElement('img');
+            userAvatarContainer.appendChild(img);
+        }
+        img.src = getAvatarUrl(profileImageKey);
+        img.classList.remove('hidden');
+    }
+};
 
 // ============ THREE.JS SETUP ============
 const canvas = document.getElementById('game-canvas');
@@ -83,6 +127,22 @@ window.showMenu = (menuId) => {
         currentMenu = menuId;
     }
 
+    // Special handling for friends menu
+    if (menuId === 'friends') {
+        const guestWarning = document.getElementById('friends-guest-warning');
+        const friendsContent = document.getElementById('friends-section-content');
+
+        if (!currentUser || currentUser.type === 'guest') {
+            if (guestWarning) guestWarning.classList.remove('hidden');
+            if (friendsContent) friendsContent.style.display = 'none';
+        } else {
+            if (guestWarning) guestWarning.classList.add('hidden');
+            if (friendsContent) friendsContent.style.display = 'block';
+            // Request friends list
+            socket.emit('getFriends');
+        }
+    }
+
     if (menuId === 'join') {
         refreshServerList();
     }
@@ -122,10 +182,23 @@ window.refreshServerList = () => {
 };
 
 window.joinRoom = (roomId) => {
-    const name = document.getElementById('player-name').value.trim() || 'Chef';
+    const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
     // Join existing room
     socket.emit('joinRoom', { name, roomId, password: window.pendingPassword || undefined }); // Mode/Diff taken from room
     window.pendingPassword = null; // Clear after use
+};
+
+window.reconnectToRoom = (roomId) => {
+    const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
+    console.log('Attempting to reconnect to room:', roomId);
+    showNotif('Reconnecting', 'Rejoining your game...', 'info');
+
+    // Hide the lobby screen while reconnecting
+    const lobbyScreen = document.getElementById('lobby-screen');
+    if (lobbyScreen) lobbyScreen.classList.add('hidden');
+
+    // Use the dedicated reconnect event (not joinRoom)
+    socket.emit('reconnectRoom', { name, roomId });
 };
 
 window.leaveRoom = () => {
@@ -134,7 +207,7 @@ window.leaveRoom = () => {
 };
 
 window.startSinglePlayer = (difficulty = 'easy') => {
-    const name = document.getElementById('player-name').value.trim() || 'Chef';
+    const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
     const roomId = `sp_${Date.now()}`;
     socket.emit('joinRoom', {
         name,
@@ -145,9 +218,179 @@ window.startSinglePlayer = (difficulty = 'easy') => {
     // For single player, we want to hide the lobby immediately to give instant feedback
     const lobbyScreen = document.getElementById('lobby-screen');
     if (lobbyScreen) lobbyScreen.classList.remove('active');
-    // We'll show the game screen when gameStarted arrives, 
     // but in the meantime, we can show a minimalist loading if needed.
 };
+
+// ============ FRIEND SYSTEM LOBBY HELPER ============
+window.addFriendFromLobby = (name) => {
+    if (socket) {
+        socket.emit('addFriend', { name });
+    }
+};
+
+// ============ NOTIFICATION SYSTEM ============
+window.showNotif = (title, msg, type = 'info') => {
+    const container = document.getElementById('notifications');
+    if (!container) return;
+
+    const notif = document.createElement('div');
+    notif.className = `notif ${type}`;
+
+    let icon = 'bi-info-circle';
+    if (type === 'success') icon = 'bi-check-circle-fill';
+    if (type === 'error') icon = 'bi-exclamation-triangle-fill';
+
+    notif.innerHTML = `
+        <div class="notif-icon"><i class="bi ${icon}"></i></div>
+        <div class="notif-content">
+            <span class="notif-title">${title}</span>
+            <span class="notif-msg">${msg}</span>
+        </div>
+    `;
+
+    container.appendChild(notif);
+
+    // Auto remove
+    setTimeout(() => {
+        notif.classList.add('fade-out');
+        setTimeout(() => notif.remove(), 500);
+    }, 4000);
+};
+
+// ============ USER SYSTEM ============
+window.switchLoginTab = (tab) => {
+    // Buttons
+    document.querySelectorAll('.login-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase() === tab);
+    });
+    // Forms
+    document.querySelectorAll('.auth-form').forEach(form => {
+        form.classList.toggle('active', form.id === `form-${tab}`);
+    });
+
+    // Update hint text
+    const hint = document.getElementById('auth-hint');
+    if (tab === 'guest') hint.textContent = "Guest progress is saved only on this browser.";
+    else if (tab === 'register') hint.textContent = "Create an account to save progress permanently!";
+    else hint.textContent = "Welcome back, Chef!";
+};
+
+window.handleRegister = () => {
+    const username = document.getElementById('register-username').value.trim();
+    const password = document.getElementById('register-password').value.trim();
+    const confirm = document.getElementById('register-confirm-password').value.trim();
+
+    if (username.length < 3) return showNotif('Error', 'Username must be at least 3 characters!', 'error');
+    if (password.length < 6) return showNotif('Error', 'Password must be at least 6 characters!', 'error');
+    if (password !== confirm) return showNotif('Error', 'Passwords do not match!', 'error');
+
+    socket.emit('register', { username, password });
+};
+
+window.handleLogin = () => {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+
+    if (!username || !password) return showNotif('Error', 'Enter both username and password!', 'error');
+
+    socket.emit('userLogin', { username, password });
+};
+
+window.loginGuest = () => {
+    const nameInput = document.getElementById('guest-name');
+    const name = nameInput.value.trim() || 'Chef';
+    // Support session persistence even after tab is closed (local storage)
+    const storedUserStr = localStorage.getItem('chef_user_guest');
+    const storedUser = storedUserStr ? JSON.parse(storedUserStr) : {};
+
+    socket.emit('guestLogin', {
+        userId: (storedUser.type === 'guest') ? storedUser.id : null,
+        name: name
+    });
+};
+
+window.logout = () => {
+    localStorage.removeItem('chef_user'); // Account
+    localStorage.removeItem('chef_user_guest'); // Guest
+    location.reload();
+};
+
+socket.on('loginSuccess', (user) => {
+    // Only show notification if not an auto-login (detected if login overlay is visible)
+    const loginOverlay = document.getElementById('login-overlay');
+    if (loginOverlay && !loginOverlay.classList.contains('hidden')) {
+        showNotif('Success', `Welcome Chef ${user.name || user.username}!`, 'success');
+    }
+
+    currentUser = user;
+
+    // Account type users saved permanently, guests saved separately so they don't override each other
+    if (user.type === 'account') {
+        localStorage.setItem('chef_user', JSON.stringify(user));
+    } else {
+        localStorage.setItem('chef_user_guest', JSON.stringify(user));
+    }
+
+    // Update UI
+    const userProfile = document.getElementById('user-profile');
+    const displayUserName = document.getElementById('display-user-name');
+    const userAvatarIcon = document.querySelector('.user-avatar i');
+    const userAvatarContainer = document.querySelector('.user-avatar');
+
+    if (loginOverlay) loginOverlay.classList.add('hidden');
+    if (userProfile) userProfile.classList.remove('hidden');
+    if (displayUserName) displayUserName.textContent = user.name || user.username;
+
+    // Show avatar in the circle
+    refreshUserAvatar();
+
+    // Refresh room list to show reconnect button if applicable
+    socket.emit('getRooms');
+
+    // Update friends panel based on account type
+    const addFriendSection = document.getElementById('friends-panel-add-section');
+    const panelList = document.getElementById('main-menu-friends-list');
+
+    if (user.type === 'account') {
+        // Show add friend section for registered users
+        if (addFriendSection) addFriendSection.style.display = 'flex';
+        socket.emit('getFriends');
+    } else {
+        // Hide add friend section for guests
+        if (addFriendSection) addFriendSection.style.display = 'none';
+        if (panelList) {
+            panelList.innerHTML = '<p class="friends-empty-msg">Create an account to add friends</p>';
+        }
+    }
+
+    console.log(`✅ Logged in as ${user.name || user.username}`);
+});
+
+socket.on('loginError', (data) => {
+    showNotif('Login/Auth Error', data.msg, 'error');
+});
+
+socket.on('forceLogout', (data) => {
+    showNotif('Session Ended', data.msg, 'error');
+
+    // Clear stored credentials
+    localStorage.removeItem('chef_user');
+    localStorage.removeItem('chef_user_guest');
+
+    // Reload page after a short delay to show the notification
+    setTimeout(() => {
+        location.reload();
+    }, 2000);
+});
+
+socket.on('registerSuccess', (data) => {
+    showNotif('Registered!', data.msg, 'success');
+    switchLoginTab('login');
+    // Clear registration fields
+    document.getElementById('register-username').value = '';
+    document.getElementById('register-password').value = '';
+    document.getElementById('register-confirm-password').value = '';
+});
 
 // ============ NEW FEATURE HANDLERS ============
 
@@ -211,11 +454,58 @@ window.clearFilters = () => {
 
 // Friends
 window.addFriend = () => {
-    const friendName = document.getElementById('add-friend-input').value.trim();
-    if (friendName) {
-        socket.emit('addFriend', { name: friendName });
-        document.getElementById('add-friend-input').value = '';
+    // Check if user is logged in and not a guest
+    if (!currentUser) {
+        showNotif('Error', 'You need to be logged in to add friends!', 'error');
+        return;
     }
+
+    if (currentUser.type === 'guest') {
+        showNotif('Error', 'Guest accounts cannot add friends. Please create an account!', 'error');
+        return;
+    }
+
+    const friendName = document.getElementById('add-friend-input').value.trim();
+    if (!friendName) {
+        showNotif('Error', 'Please enter a username!', 'error');
+        return;
+    }
+
+    if (friendName === currentUser.username) {
+        showNotif('Error', 'You cannot add yourself as a friend!', 'error');
+        return;
+    }
+
+    socket.emit('addFriend', { name: friendName });
+    document.getElementById('add-friend-input').value = '';
+};
+
+// Add friend from panel (main menu)
+window.addFriendFromPanel = () => {
+    // Check if user is logged in and not a guest
+    if (!currentUser) {
+        showNotif('Error', 'You need to be logged in to add friends!', 'error');
+        return;
+    }
+
+    if (currentUser.type === 'guest') {
+        showNotif('Error', 'Guest accounts cannot add friends. Please create an account!', 'error');
+        return;
+    }
+
+    const friendName = document.getElementById('friends-panel-add-input').value.trim();
+    if (!friendName) {
+        showNotif('Error', 'Please enter a username!', 'error');
+        return;
+    }
+
+    if (friendName === currentUser.username) {
+        showNotif('Error', 'You cannot add yourself as a friend!', 'error');
+        return;
+    }
+
+    socket.emit('addFriend', { name: friendName });
+    document.getElementById('friends-panel-add-input').value = '';
 };
 
 // Chat Toggle
@@ -223,6 +513,18 @@ window.toggleChat = () => {
     const chat = document.getElementById('chat-container');
     chat.classList.toggle('collapsed');
 };
+
+// Setup Enter key for add friend input
+document.addEventListener('DOMContentLoaded', () => {
+    const friendInput = document.getElementById('friends-panel-add-input');
+    if (friendInput) {
+        friendInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addFriendFromPanel();
+            }
+        });
+    }
+});
 
 // Pause Menu
 window.resumeGame = () => {
@@ -239,7 +541,7 @@ window.submitPassword = () => {
     const password = document.getElementById('room-password-input').value.trim();
     const roomId = window.pendingRoomId;
     const name = document.getElementById('player-name').value.trim() || 'Chef';
-    
+
     if (password && roomId) {
         // Retry joining with the password
         socket.emit('joinRoom', { name, roomId, password });
@@ -267,6 +569,115 @@ window.showKickModal = (playerId, playerName) => {
     document.getElementById('kick-player-name').textContent = playerName;
     document.getElementById('kick-modal').classList.remove('hidden');
 };
+
+// ============ PROFILE CUSTOMIZATION ============
+let selectedAvatarKey = 'chef_1';
+
+
+window.openProfileCustomization = () => {
+    if (!currentUser || currentUser.type === 'guest') {
+        showNotif('Notice', 'Please create an account to customize your profile!', 'info');
+        return;
+    }
+
+    const modal = document.getElementById('profile-modal');
+    const nameInput = document.getElementById('profile-new-username');
+    const previewName = document.getElementById('profile-preview-name');
+    const previewImg = document.getElementById('profile-preview-img');
+
+    nameInput.value = currentUser.name || currentUser.username;
+    previewName.textContent = currentUser.name || currentUser.username;
+
+    selectedAvatarKey = currentUser.profileImage || 'chef_1';
+    previewImg.src = getAvatarUrl(selectedAvatarKey);
+
+    updateProfilePreview();
+
+    // Update avatar grid selection
+    document.querySelectorAll('.avatar-option').forEach(opt => {
+        const key = opt.getAttribute('data-key');
+        if (key) {
+            opt.classList.toggle('selected', key === selectedAvatarKey);
+        } else {
+            // Fallback to title/alt or older method if data-key not found
+            const onclickText = opt.getAttribute('onclick') || "";
+            opt.classList.toggle('selected', onclickText.includes(`'${selectedAvatarKey}'`));
+        }
+    });
+
+    modal.classList.remove('hidden');
+};
+
+window.closeProfileModal = () => {
+    document.getElementById('profile-modal').classList.add('hidden');
+};
+
+window.selectAvatar = (key, elem) => {
+    selectedAvatarKey = key;
+    document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
+    elem.classList.add('selected');
+
+    const previewImg = document.getElementById('profile-preview-img');
+    if (previewImg) previewImg.src = getAvatarUrl(key);
+};
+
+window.updateProfilePreview = () => {
+    const nameInput = document.getElementById('profile-new-username');
+    const previewName = document.getElementById('profile-preview-name');
+    if (nameInput && previewName) {
+        previewName.textContent = nameInput.value || 'Chef';
+    }
+};
+
+window.saveProfileChanges = () => {
+    const nameInput = document.getElementById('profile-new-username');
+    if (!nameInput) {
+        console.error('❌ Profile input not found');
+        return;
+    }
+
+    const newUsername = nameInput.value.trim();
+    if (newUsername.length < 3) {
+        showNotif('Error', 'Name must be at least 3 characters!', 'error');
+        return;
+    }
+
+    console.log('📤 Sending profile update:', { newUsername, selectedAvatarKey });
+    showNotif('System', 'Saving changes...', 'info');
+
+    socket.emit('updateProfile', {
+        newUsername: newUsername,
+        newProfileImage: selectedAvatarKey
+    });
+};
+
+socket.on('updateProfileSuccess', (data) => {
+    showNotif('Success', data.msg, 'success');
+    currentUser = data.user;
+    localStorage.setItem('chef_user', JSON.stringify(currentUser));
+
+    // Update Lobby UI
+    const displayUserName = document.getElementById('display-user-name');
+    if (displayUserName) displayUserName.textContent = currentUser.name || currentUser.username;
+
+    refreshUserAvatar();
+
+    closeProfileModal();
+});
+
+socket.on('updateProfileError', (data) => {
+    showNotif('Error', data.msg, 'error');
+});
+
+socket.on('playerProfileUpdated', (data) => {
+    // If we are in a game, we might need to update the player mesh or tag
+    // For now, it's mostly for the HUD and lobby
+    if (roomState && roomState.players[data.id]) {
+        roomState.players[data.id].name = data.name;
+        roomState.players[data.id].profileImage = data.profileImage;
+        if (ui) ui.updatePlayerList(roomState.players);
+    }
+});
 
 // Connection Quality Tracking
 let pingInterval = null;
@@ -318,13 +729,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const createOptions = document.querySelectorAll('#menu-create .banner-option');
     if (createOptions.length > 0) createOptions[0].classList.add('selected');
+
+    // Auto-login if previously saved
+    const savedLocal = localStorage.getItem('chef_user');
+    const savedGuest = localStorage.getItem('chef_user_guest');
+    const savedUser = savedLocal || savedGuest;
+
+    if (savedUser) {
+        try {
+            const user = JSON.parse(savedUser);
+            if (user.type === 'account') {
+                socket.emit('userLogin', {
+                    autoLogin: true,
+                    userId: user.id,
+                    username: user.username
+                });
+            } else {
+                socket.emit('guestLogin', { userId: user.id, name: user.name });
+            }
+        } catch (e) {
+            console.error('Error parsing saved user:', e);
+            localStorage.removeItem('chef_user');
+            localStorage.removeItem('chef_user_guest');
+        }
+    }
 });
 
 // START SINGLE PLAYER
 const btnStartSingle = document.getElementById('btn-start-single');
 if (btnStartSingle) {
     btnStartSingle.addEventListener('click', () => {
-        const name = document.getElementById('player-name').value.trim() || 'Chef';
+        const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
         const roomId = `sp_${Date.now()}`;
         socket.emit('joinRoom', {
             name,
@@ -332,8 +767,6 @@ if (btnStartSingle) {
             mode: 'single',
             difficulty: selectedDiff
         });
-        // Single player auto-starts immediately - skip waiting room
-        // The server will detect single player mode and start game automatically
     });
 }
 
@@ -341,11 +774,10 @@ if (btnStartSingle) {
 const btnCreateLobby = document.getElementById('btn-create-lobby');
 if (btnCreateLobby) {
     btnCreateLobby.addEventListener('click', () => {
-        const name = document.getElementById('player-name').value.trim() || 'Chef';
+        const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
         let roomName = document.getElementById('create-room-name').value.trim();
         if (!roomName) roomName = `Kitchen_${Math.floor(Math.random() * 1000)}`;
 
-        const description = document.getElementById('create-room-desc')?.value.trim() || '';
         const passwordCheck = document.getElementById('create-room-password-check')?.checked || false;
         const password = passwordCheck ? document.getElementById('create-room-password')?.value.trim() : '';
 
@@ -354,7 +786,6 @@ if (btnCreateLobby) {
             roomName,
             mode: selectedMode,
             difficulty: createDiff,
-            description,
             password: password || undefined
         });
     });
@@ -381,6 +812,14 @@ const btnRestart = document.getElementById('btn-restart');
 if (btnRestart) {
     btnRestart.addEventListener('click', () => {
         socket.emit('restartGame');
+    });
+}
+
+const btnExitGame = document.getElementById('btn-exit-game');
+if (btnExitGame) {
+    btnExitGame.addEventListener('click', () => {
+        socket.emit('leaveRoom');
+        location.reload();
     });
 }
 
@@ -426,16 +865,23 @@ socket.on('roomList', (rooms) => {
         const hasPassword = room.hasPassword ? '<i class="bi bi-lock-fill" title="Password Protected"></i> ' : '';
         const description = room.description ? `<br><small style="color:var(--text-dim);">${room.description}</small>` : '';
 
+        // Determine action button
+        let actionButton = '';
+        if (room.canReconnect) {
+            // Show reconnect button for any non-finished game state
+            actionButton = `<button class="btn-sm btn-reconnect" onclick="reconnectToRoom('${room.id}')"><i class="bi bi-arrow-clockwise"></i> RECONNECT</button>`;
+        } else if (room.players < room.maxPlayers && room.state !== 'playing') {
+            actionButton = `<button class="btn-sm" onclick="joinRoom('${room.id}')"><i class="bi bi-box-arrow-in-right"></i> JOIN</button>`;
+        } else {
+            actionButton = '<span style="color:#ef4444; font-size:12px;">UNAVAILABLE</span>';
+        }
+
         tr.innerHTML = `
-            <td><b>${hasPassword}${room.id}</b>${description}</td>
-            <td>${modeIcons[room.mode] || room.mode} <small>(${room.difficulty})</small></td>
+            <td><b>${hasPassword}${room.id}</b></td>
+            <td>${modeIcons[room.mode] || room.mode} <small>(${room.difficulty || 'easy'})</small></td>
             <td>${room.players}/${room.maxPlayers}</td>
             <td>${statusBadge}</td>
-            <td>
-                ${room.players < room.maxPlayers && room.state !== 'playing'
-                ? `<button class="btn-sm" onclick="joinRoom('${room.id}')"><i class="bi bi-box-arrow-in-right"></i> JOIN</button>`
-                : '<span style="color:#ef4444; font-size:12px;">UNAVAILABLE</span>'}
-            </td>
+            <td>${actionButton}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -455,58 +901,104 @@ socket.on('init', (data) => {
             return;
         }
 
+        // Store room code in roomState for easy access
+        if (data.roomCode) {
+            roomState.roomCode = data.roomCode;
+        }
+
         ui = new UIManager(gameConfig, socket);
-        ui.updatePlayerList(roomState.players); // Keep for game HUD
+        ui.updatePlayerList(roomState.players);
         ui.buildRecipeBook();
 
-        // --- LOBBY UI UPDATE ---
-        // Hide all menus, show waiting room only if NOT single player
-        document.querySelectorAll('.lobby-menu').forEach(el => el.classList.add('hidden'));
+        if (data.isReconnect) {
+            // ── RECONNECT PATH ──
+            // Don't re-show the lobby; go straight to the correct screen.
+            document.querySelectorAll('.lobby-menu').forEach(el => el.classList.add('hidden'));
 
-        if (roomState.mode !== 'single') {
-            const waitingMenu = document.getElementById('menu-waiting');
-            if (waitingMenu) waitingMenu.classList.remove('hidden');
-        }
-
-        if (roomState.mode === 'single' || roomState.state === 'playing') {
             const lobbyScreen = document.getElementById('lobby-screen');
             const gameScreen = document.getElementById('game-screen');
-            if (lobbyScreen) lobbyScreen.classList.remove('active');
-            if (gameScreen) gameScreen.classList.add('active');
+
+            if (roomState.state === 'playing') {
+                if (lobbyScreen) lobbyScreen.classList.remove('active');
+                if (gameScreen) gameScreen.classList.add('active');
+                if (ui) {
+                    ui.showScreen('game');
+                    if (roomState.orders) ui.updateOrders(roomState.orders, gameConfig);
+                    const displayScore = roomState.mode === 'multi_vs'
+                        ? (roomState.players[playerId]?.score || 0)
+                        : (roomState.score || 0);
+                    ui.updateScore(displayScore, 0);
+                    if (roomState.timeLeft !== undefined) ui.updateTimer(roomState.timeLeft);
+                }
+            } else {
+                // Reconnected to lobby
+                if (lobbyScreen) {
+                    lobbyScreen.classList.remove('hidden');
+                    lobbyScreen.classList.add('active');
+                }
+                if (gameScreen) gameScreen.classList.remove('active');
+                if (typeof showMenu === 'function') showMenu('waiting');
+            }
+
+            updateWaitingList(roomState.players);
+            if (typeof startPingTracking === 'function') startPingTracking();
+
+        } else {
+            // ── FRESH JOIN PATH ──
+            document.querySelectorAll('.lobby-menu').forEach(el => el.classList.add('hidden'));
+
+            if (roomState.mode !== 'single') {
+                const waitingMenu = document.getElementById('menu-waiting');
+                if (waitingMenu) waitingMenu.classList.remove('hidden');
+
+                if (currentUser && currentUser.type === 'account') {
+                    socket.emit('getFriends');
+                }
+            }
+
+            if (roomState.mode === 'single' || roomState.state === 'playing') {
+                const lobbyScreen = document.getElementById('lobby-screen');
+                const gameScreen = document.getElementById('game-screen');
+                if (lobbyScreen) lobbyScreen.classList.remove('active');
+                if (gameScreen) gameScreen.classList.add('active');
+            }
+
+            const waitingRoomName = document.getElementById('waiting-room-name');
+            if (waitingRoomName) waitingRoomName.innerText = `Room: ${roomState.id}`;
+
+            const roomCodeValue = document.getElementById('room-code-value');
+            if (roomCodeValue && data.roomCode) roomCodeValue.textContent = data.roomCode;
+
+            const modeDisplay = roomState.mode === 'multi_coop' ? 'Co-op' : roomState.mode === 'multi_vs' ? 'VS' : 'Single';
+            const roomModeDisplay = document.getElementById('room-mode-display');
+            const roomDifficultyDisplay = document.getElementById('room-difficulty-display');
+            const roomPlayersDisplay = document.getElementById('room-players-display');
+            if (roomModeDisplay) roomModeDisplay.textContent = `Mode: ${modeDisplay}`;
+            if (roomDifficultyDisplay) roomDifficultyDisplay.textContent = `Difficulty: ${roomState.difficulty}`;
+            const playerCount = Object.keys(roomState.players).length;
+            const maxPlayers = roomState.mode === 'single' ? 1 : roomState.mode === 'multi_vs' ? 2 : 3;
+            if (roomPlayersDisplay) roomPlayersDisplay.textContent = `Players: ${playerCount}/${maxPlayers}`;
+
+            updateWaitingList(roomState.players);
+            if (typeof startPingTracking === 'function') startPingTracking();
+
+            // Hide/Show Chat based on mode
+            const chatSidebar = document.querySelector('.quick-chat-sidebar');
+            const chatLog = document.getElementById('hud-chat-log');
+            if (roomState.mode === 'single') {
+                if (chatSidebar) chatSidebar.style.display = 'none';
+                if (chatLog) chatLog.style.display = 'none';
+            } else {
+                if (chatSidebar) chatSidebar.style.display = 'flex';
+                if (chatLog) chatLog.style.display = 'flex';
+            }
         }
 
-        const waitingRoomName = document.getElementById('waiting-room-name');
-        if (waitingRoomName) waitingRoomName.innerText = `Room: ${roomState.id}`;
-
-        // Show room code
-        const roomCodeValue = document.getElementById('room-code-value');
-        if (roomCodeValue && data.roomCode) {
-            roomCodeValue.textContent = data.roomCode;
-        }
-
-        // Show room info
-        const modeDisplay = roomState.mode === 'multi_coop' ? 'Co-op' : roomState.mode === 'multi_vs' ? 'VS' : 'Single';
-        const roomModeDisplay = document.getElementById('room-mode-display');
-        const roomDifficultyDisplay = document.getElementById('room-difficulty-display');
-        const roomPlayersDisplay = document.getElementById('room-players-display');
-
-        if (roomModeDisplay) roomModeDisplay.textContent = `Mode: ${modeDisplay}`;
-        if (roomDifficultyDisplay) roomDifficultyDisplay.textContent = `Difficulty: ${roomState.difficulty}`;
-        const playerCount = Object.keys(roomState.players).length;
-        const maxPlayers = roomState.mode === 'single' ? 1 : roomState.mode === 'multi_vs' ? 2 : 3;
-        if (roomPlayersDisplay) roomPlayersDisplay.textContent = `Players: ${playerCount}/${maxPlayers}`;
-
-        updateWaitingList(roomState.players);
-
-        // Start ping tracking
-        if (typeof startPingTracking === 'function') {
-            startPingTracking();
-        }
     } catch (error) {
         console.error('Error in init handler:', error);
     }
 
-    // --- KITCHEN SETUP ---
+    // ── KITCHEN SETUP (both paths) ──
     if (kitchen && typeof kitchen.clear === 'function') kitchen.clear();
     try {
         kitchen = new KitchenRenderer(scene, gameConfig, roomState);
@@ -517,19 +1009,14 @@ socket.on('init', (data) => {
         console.error('Error building kitchen:', error);
     }
 
-    // Camera Setup (Front View)
-    if (typeof setupCamera === 'function') {
-        setupCamera(gameConfig);
-    }
+    if (typeof setupCamera === 'function') setupCamera(gameConfig);
 
-    // Create player meshes
+    // (Re)create player meshes
     if (roomState.players) {
+        // Remove all existing meshes first to avoid duplicates on reconnect
+        Object.keys(playerMeshes || {}).forEach(id => removePlayerMesh(id));
         Object.values(roomState.players).forEach(p => {
-            try {
-                createPlayerMesh(p);
-            } catch (error) {
-                console.error('Error creating player mesh:', error);
-            }
+            try { createPlayerMesh(p); } catch (e) { console.error('Error creating player mesh:', e); }
         });
     }
 });
@@ -558,6 +1045,89 @@ socket.on('playerJoined', (player) => {
     updateWaitingList(roomState.players);
 });
 
+socket.on('playerReconnected', (player) => {
+    if (!roomState) return;
+
+    // Remove any existing mesh first to prevent duplicates
+    removePlayerMesh(player.id);
+
+    roomState.players[player.id] = player;
+
+    try {
+        createPlayerMesh(player);
+    } catch (error) {
+        console.error('Error creating player mesh:', error);
+    }
+
+    if (ui && typeof ui.updatePlayerList === 'function') {
+        ui.updatePlayerList(roomState.players);
+    }
+
+    addHudChatLine({
+        sender: 'SYSTEM',
+        message: `${player.name} reconnected!`,
+        color: '#FFD23F'
+    });
+
+    // Ensure waiting list updates if the room is still in lobby
+    updateWaitingList(roomState.players);
+
+    showNotif('Player Reconnected', `${player.name} is back!`, 'success');
+});
+
+// Handle reconnection success for the current player
+socket.on('reconnectSuccess', (data) => {
+    const msg = data.roomState === 'playing'
+        ? 'Back in the game!'
+        : 'Rejoined the lobby!';
+    showNotif('Reconnected! ✅', msg, 'success');
+    // The init event handles all screen transitions
+});
+
+// Server tells us to use the reconnectRoom event (redirect from joinRoom)
+socket.on('useReconnect', (data) => {
+    const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
+    socket.emit('reconnectRoom', { name, roomId: data.roomId });
+});
+
+// Handle reconnection failure
+socket.on('reconnectFailed', (data) => {
+    if (data.fallbackJoin && data.roomId) {
+        // Silently fall through to a normal join (e.g. new game session started)
+        console.log('Reconnect fell through to normal join for room:', data.roomId);
+        const name = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
+        socket.emit('joinRoom', { name, roomId: data.roomId });
+        return;
+    }
+
+    showNotif('Reconnection Failed', data.message || 'Could not reconnect.', 'error');
+
+    // Reveal the lobby and go to the join/server-browser menu
+    const lobbyScreen = document.getElementById('lobby-screen');
+    if (lobbyScreen) {
+        lobbyScreen.classList.remove('hidden');
+        lobbyScreen.classList.add('active');
+    }
+    if (typeof showMenu === 'function') showMenu('join');
+});
+
+socket.on('playerDisconnected', (data) => {
+    if (!roomState) return;
+
+    addHudChatLine({
+        sender: 'SYSTEM',
+        message: data.canReconnect ? `${data.name} disconnected (can reconnect)` : `${data.name} left the game`,
+        color: '#EF4444'
+    });
+
+    // Remove the player's mesh immediately when they disconnect
+    removePlayerMesh(data.id);
+
+    if (data.canReconnect) {
+        showNotif('Player Disconnected', `${data.name} disconnected but can reconnect`, 'info');
+    }
+});
+
 function updateWaitingList(players) {
     const list = document.getElementById('waiting-player-list');
     if (!list) return;
@@ -572,12 +1142,24 @@ function updateWaitingList(players) {
         if (p.isReady) div.classList.add('ready');
 
         const readyStatus = p.isHost ? '<span class="ready-badge host">HOST</span>' : (p.isReady ? '<span class="ready-badge success"><i class="bi bi-check-lg"></i> READY</span>' : '<span class="ready-badge pending">WAITING</span>');
+        const isFriend = currentFriends.some(f => f.id === p.userId);
+        const canAddFriend = currentUser && currentUser.type === 'account' &&
+            p.userType === 'account' &&
+            p.id !== playerId &&
+            !isFriend;
+
+        const friendBtn = canAddFriend ?
+            `<button class="btn-add-friend-lobby" onclick="addFriendFromLobby('${p.username || p.name}')" title="Add Friend">
+                <i class="bi bi-person-plus-fill"></i>
+            </button>` : '';
+
         const hostIcon = p.isHost ? '<i class="bi bi-crown-fill" style="color:#FFD23F"></i> ' : '';
         const youSuffix = p.id === playerId ? ' (You)' : '';
 
         div.innerHTML = `
             <div class="player-info">
                 ${hostIcon}<strong>${p.name}${youSuffix}</strong>
+                ${friendBtn}
             </div>
             <div class="player-status">
                 ${readyStatus}
@@ -750,6 +1332,19 @@ socket.on('gameStarted', (data) => {
     if (ui) {
         ui.showScreen('game');
         if (data.orders) ui.updateOrders(data.orders, gameConfig);
+        ui.updateScore(0, 0); // reset score display
+    }
+
+    const vsBoard = document.getElementById('vs-scoreboard');
+    if (roomState.mode === 'multi_vs') {
+        if (vsBoard) vsBoard.classList.remove('hidden');
+        if (typeof updateVSScoreboard === 'function') {
+            const initialScores = {};
+            Object.values(roomState.players).forEach(p => initialScores[p.id] = 0);
+            updateVSScoreboard(initialScores);
+        }
+    } else {
+        if (vsBoard) vsBoard.classList.add('hidden');
     }
 });
 
@@ -820,8 +1415,15 @@ socket.on('orderCompleted', (data) => {
     }
     if (ui) {
         if (typeof ui.updateOrders === 'function') ui.updateOrders(roomState.orders, gameConfig);
-        if (typeof ui.updateScore === 'function') ui.updateScore(data.totalScore, data.combo);
-        if (typeof ui.showScorePop === 'function') ui.showScorePop(`+${data.points}`);
+
+        const displayScore = roomState.mode === 'multi_vs' ? (roomState.players[playerId]?.score || 0) : data.totalScore;
+        if (typeof ui.updateScore === 'function') ui.updateScore(displayScore, data.combo);
+
+        if (typeof ui.showScorePop === 'function') {
+            if (roomState.mode !== 'multi_vs' || data.playerId === playerId) {
+                ui.showScorePop(`+${data.points}`);
+            }
+        }
         if (typeof ui.updatePlayerList === 'function') ui.updatePlayerList(roomState.players);
     }
 });
@@ -829,19 +1431,13 @@ socket.on('orderCompleted', (data) => {
 socket.on('orderExpired', (data) => {
     if (!roomState || !gameConfig) return;
     roomState.orders = roomState.orders.filter(o => o.id !== data.orderId);
-    roomState.score = data.score;
     if (ui) {
         if (typeof ui.updateOrders === 'function') ui.updateOrders(roomState.orders, gameConfig);
-        if (typeof ui.updateScore === 'function') ui.updateScore(data.score, 0);
     }
 });
 
 socket.on('wrongDish', (data) => {
     if (!roomState) return;
-    roomState.score = data.score;
-    if (ui && typeof ui.updateScore === 'function') {
-        ui.updateScore(data.score, 0);
-    }
 });
 
 socket.on('timeUpdate', (t) => {
@@ -876,15 +1472,33 @@ socket.on('burning', () => {
 });
 socket.on('fire', () => { });
 socket.on('notification', (data) => {
+    let finalMsg = data.msg;
+    // Format POV if in multi_vs
+    if (roomState?.mode === 'multi_vs' && data.playerId && data.playerName) {
+        if (data.playerId === playerId) {
+            // Keep original msg, maybe prepend 'You: '
+            finalMsg = finalMsg.includes('served') ? finalMsg : `You: ${finalMsg}`;
+        } else {
+            // It's the opponent
+            if (data.type === 'error' && data.msg.includes('pts')) {
+                // If it's a penalty, maybe we just want to say "Opponent burned food!"
+                // without showing the "-X pts" as it didn't subtract from us.
+                finalMsg = `${data.playerName}: ${data.msg.split('-')[0].trim()}`;
+            } else {
+                finalMsg = `${data.playerName}: ${finalMsg}`;
+            }
+        }
+    }
+
     if (ui && typeof ui.showNotification === 'function') {
-        ui.showNotification(data.msg, data.type);
+        ui.showNotification(finalMsg, data.type);
     } else {
         // Fallback notification
         const notification = document.getElementById('notifications');
         if (notification && data) {
             const el = document.createElement('div');
             el.className = `notification ${data.type || 'info'}`;
-            el.textContent = data.msg;
+            el.textContent = finalMsg;
             notification.appendChild(el);
             setTimeout(() => el.remove(), 2500);
         }
@@ -895,7 +1509,7 @@ socket.on('gameOver', (data) => {
     if (!roomState) return;
     roomState.state = 'gameover';
     if (ui && typeof ui.showGameOver === 'function') {
-        ui.showGameOver(data);
+        ui.showGameOver(data, playerId);
     }
 });
 
@@ -918,6 +1532,14 @@ socket.on('gameStateUpdate', (data) => {
     roomState.stations = data.stations;
     roomState.orders = data.orders;
     roomState.score = data.score;
+    // Sync players map too (important after a reconnect so all POVs agree)
+    if (data.players) {
+        roomState.players = data.players;
+        if (ui && typeof ui.updatePlayerList === 'function') {
+            ui.updatePlayerList(roomState.players);
+        }
+        updateWaitingList(roomState.players);
+    }
     if (kitchen && typeof kitchen.updateAllStations === 'function') {
         try {
             kitchen.updateAllStations(data.stations);
@@ -1011,13 +1633,29 @@ socket.on('joinByCodeResult', (data) => {
             window.pendingRoomCode = data.code;
             window.pendingRoomId = data.roomId;
         } else {
+            // Use stored player name or get from input field or current user
+            let playerName = window.pendingPlayerName;
+            if (!playerName) {
+                const nameInput = document.getElementById('player-name');
+                playerName = nameInput ? nameInput.value.trim() : '';
+            }
+            if (!playerName && currentUser) {
+                playerName = currentUser.name || currentUser.username;
+            }
+            if (!playerName) {
+                playerName = 'Chef';
+            }
+
             socket.emit('joinRoom', {
-                name: document.getElementById('player-name').value.trim() || 'Chef',
+                name: playerName,
                 roomId: data.roomId
             });
+
+            // Clear pending name
+            window.pendingPlayerName = null;
         }
     } else {
-        ui?.showNotification(data.message || 'Room not found!', 'error');
+        showNotif('Error', data.message || 'Room not found!', 'error');
     }
 });
 
@@ -1031,40 +1669,376 @@ socket.on('passwordRequired', (data) => {
 
 // Friends
 socket.on('friendList', (friends) => {
+    currentFriends = friends;
+    // Update main friends list (in friends menu)
     const list = document.getElementById('friends-list');
-    if (!list) return;
+    if (list) {
+        if (friends.length === 0) {
+            list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">No friends yet</p>';
+        } else {
+            list.innerHTML = friends.map(f => {
+                const status = f.status || 'offline';
+                const canInvite = status === 'online' || status === 'lobby';
 
-    if (friends.length === 0) {
-        list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">No friends yet</p>';
-        return;
+                return `
+                    <div class="friend-item">
+                        <div class="friend-info">
+                            <span class="friend-status ${status}"></span>
+                            <div class="friend-details-small">
+                                <span class="friend-name">${f.name}</span>
+                                <span class="friend-status-label">${getStatusText(status)}</span>
+                            </div>
+                        </div>
+                        ${canInvite ?
+                        `<button class="btn-sm" onclick="inviteFriendToRoom('${f.id}', '${f.name}')" title="Invite to room"><i class="bi bi-envelope"></i></button>` :
+                        `<button class="btn-sm unavailable" disabled title="Cannot invite (${getStatusText(status)})"><i class="bi bi-envelope"></i></button>`
+                    }
+                    </div>
+                `;
+            }).join('');
+        }
     }
 
-    list.innerHTML = friends.map(f => `
-        <div class="friend-item">
-            <div class="friend-info">
-                <span class="friend-status ${f.status || 'offline'}"></span>
-                <span>${f.name}</span>
-            </div>
-            <button class="btn-sm" onclick="inviteFriend('${f.id}')" title="Invite to game"><i class="bi bi-envelope"></i></button>
-        </div>
-    `).join('');
+    // Update friends panel in main menu
+    const panelList = document.getElementById('main-menu-friends-list');
+    if (panelList) {
+        if (!currentUser || currentUser.type === 'guest') {
+            panelList.innerHTML = '<p class="friends-empty-msg">Login to see your friends</p>';
+        } else if (friends.length === 0) {
+            panelList.innerHTML = '<p class="friends-empty-msg">No friends yet. Add some!</p>';
+        } else {
+            panelList.innerHTML = friends.map(f => {
+                const status = f.status || 'offline';
+                return `
+                    <div class="friend-panel-item ${status}">
+                        <span class="friend-status-dot"></span>
+                        <div class="friend-panel-info">
+                            <span class="friend-name">${f.name}</span>
+                            <span class="friend-panel-status">${getStatusText(status)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // Update waiting room friends list (friends that can be invited)
+    const waitingList = document.getElementById('waiting-friends-list');
+    if (waitingList) {
+        // Can invite friends who are online OR in another lobby (not in-game)
+        const invitableFriends = friends.filter(f => f.status === 'online' || f.status === 'lobby');
+
+        if (!currentUser || currentUser.type === 'guest') {
+            waitingList.innerHTML = '<p class="friends-empty-msg">Login to invite friends</p>';
+        } else if (invitableFriends.length === 0) {
+            waitingList.innerHTML = '<p class="friends-empty-msg">No friends available to invite</p>';
+        } else {
+            waitingList.innerHTML = invitableFriends.map(f => `
+                <div class="waiting-friend-item">
+                    <div class="waiting-friend-info">
+                        <span class="waiting-friend-name">${f.name}</span>
+                        <span class="waiting-friend-status">${getStatusText(f.status)}</span>
+                    </div>
+                    <button class="btn-invite-friend" onclick="inviteFriendToRoom('${f.id}', '${f.name}')" title="Invite to room">
+                        <i class="bi bi-envelope-fill"></i> Invite
+                    </button>
+                </div>
+            `).join('');
+        }
+    }
 });
 
-socket.on('friendAdded', (data) => {
-    if (ui && typeof ui.showNotification === 'function') {
-        ui.showNotification(`Friend ${data.name} added!`, 'success');
-    }
+socket.on('friendStatusUpdate', (data) => {
+    console.log('Friend status update:', data);
+    // Refresh the list whenever a friend's status changes
     socket.emit('getFriends');
 });
 
-socket.on('friendOnline', (data) => {
-    ui?.showNotification(`${data.name} is now online!`, 'info');
+socket.on('friendRequests', (requests) => {
+    const requestsSection = document.getElementById('friend-requests-section');
+    const requestsList = document.getElementById('friend-requests-list');
+    const requestCount = document.getElementById('request-count');
+
+    if (!requestsSection || !requestsList || !requestCount) return;
+
+    if (requests && requests.length > 0) {
+        requestsSection.style.display = 'block';
+        requestCount.textContent = requests.length;
+
+        requestsList.innerHTML = requests.map(req => `
+            <div class="friend-request-item" data-request-id="${req.from}">
+                <span class="friend-request-name">
+                    <i class="bi bi-person-fill"></i> ${req.fromName}
+                </span>
+                <div class="friend-request-actions">
+                    <button class="friend-request-btn accept" onclick="acceptFriendRequestFromPanel('${req.from}')">
+                        <i class="bi bi-check-lg"></i> Accept
+                    </button>
+                    <button class="friend-request-btn reject" onclick="rejectFriendRequestFromPanel('${req.from}')">
+                        <i class="bi bi-x-lg"></i> Reject
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        requestsSection.style.display = 'none';
+    }
 });
+
+socket.on('friendAdded', (data) => {
+    if (data.success) {
+        showNotif('Friend Request Sent', data.message || `Request sent to ${data.name}!`, 'success');
+    } else {
+        showNotif('Error', data.message || 'Could not add friend', 'error');
+    }
+});
+
+socket.on('friendError', (data) => {
+    showNotif('Error', data.message || 'Friend operation failed', 'error');
+});
+
+socket.on('friendRequestReceived', (data) => {
+    // Show live notification
+    showNotif('Friend Request', data.message, 'info');
+
+    // Play sound effect (optional)
+    playNotificationSound();
+
+    // Show popup notification with actions
+    showFriendRequestNotification(data);
+
+    // Refresh friend requests in panel
+    socket.emit('getFriends');
+});
+
+socket.on('friendRequestAccepted', (data) => {
+    showNotif('Friend Added', data.message, 'success');
+    socket.emit('getFriends');
+});
+
+socket.on('friendRequestRejected', (data) => {
+    showNotif('Request Rejected', data.message, 'info');
+});
+
+socket.on('friendOnline', (data) => {
+    showNotif('Friend Online', `${data.name} is now online!`, 'info');
+    socket.emit('getFriends'); // Refresh list
+});
+
+// Friend Request Notification System
+function showFriendRequestNotification(request) {
+    const container = document.getElementById('notifications');
+    if (!container) return;
+
+    const notif = document.createElement('div');
+    notif.className = 'notif friend-request';
+    notif.innerHTML = `
+        <div class="notif-icon"><i class="bi bi-person-plus-fill"></i></div>
+        <div class="notif-content">
+            <span class="notif-title">Friend Request</span>
+            <span class="notif-msg">${request.fromName} wants to be your friend</span>
+            <div class="notif-actions">
+                <button class="notif-btn accept" onclick="acceptFriendRequest('${request.from}', this)">
+                    <i class="bi bi-check-lg"></i> Accept
+                </button>
+                <button class="notif-btn reject" onclick="rejectFriendRequest('${request.from}', this)">
+                    <i class="bi bi-x-lg"></i> Reject
+                </button>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(notif);
+
+    // Auto-remove after 30 seconds
+    setTimeout(() => {
+        if (notif.parentElement) {
+            notif.classList.add('fade-out');
+            setTimeout(() => notif.remove(), 500);
+        }
+    }, 30000);
+}
+
+// Accept from notification popup
+window.acceptFriendRequest = (fromUserId, btnElement) => {
+    socket.emit('acceptFriendRequest', { from: fromUserId });
+    // Remove the notification
+    const notif = btnElement.closest('.notif');
+    if (notif) {
+        notif.classList.add('fade-out');
+        setTimeout(() => notif.remove(), 300);
+    }
+};
+
+// Reject from notification popup
+window.rejectFriendRequest = (fromUserId, btnElement) => {
+    socket.emit('rejectFriendRequest', { from: fromUserId });
+    // Remove the notification
+    const notif = btnElement.closest('.notif');
+    if (notif) {
+        notif.classList.add('fade-out');
+        setTimeout(() => notif.remove(), 300);
+    }
+};
+
+// Accept from friend requests panel
+window.acceptFriendRequestFromPanel = (fromUserId) => {
+    socket.emit('acceptFriendRequest', { from: fromUserId });
+
+    // Remove from panel with animation
+    const requestItem = document.querySelector(`[data-request-id="${fromUserId}"]`);
+    if (requestItem) {
+        requestItem.style.animation = 'notifFadeOut 0.3s forwards';
+        setTimeout(() => {
+            requestItem.remove();
+            // Update count
+            const requestsList = document.getElementById('friend-requests-list');
+            const requestsSection = document.getElementById('friend-requests-section');
+            if (requestsList && requestsList.children.length === 0 && requestsSection) {
+                requestsSection.style.display = 'none';
+            }
+        }, 300);
+    }
+};
+
+// Reject from friend requests panel
+window.rejectFriendRequestFromPanel = (fromUserId) => {
+    socket.emit('rejectFriendRequest', { from: fromUserId });
+
+    // Remove from panel with animation
+    const requestItem = document.querySelector(`[data-request-id="${fromUserId}"]`);
+    if (requestItem) {
+        requestItem.style.animation = 'notifFadeOut 0.3s forwards';
+        setTimeout(() => {
+            requestItem.remove();
+            // Update count
+            const requestsList = document.getElementById('friend-requests-list');
+            const requestsSection = document.getElementById('friend-requests-section');
+            const requestCount = document.getElementById('request-count');
+            if (requestsList && requestsSection && requestCount) {
+                const remaining = requestsList.children.length;
+                if (remaining === 0) {
+                    requestsSection.style.display = 'none';
+                } else {
+                    requestCount.textContent = remaining;
+                }
+            }
+        }, 300);
+    }
+};
+
+// Optional: Play notification sound
+function playNotificationSound() {
+    // You can add a sound effect here
+    // const audio = new Audio('/sounds/notification.mp3');
+    // audio.play().catch(e => console.log('Audio play failed:', e));
+}
+
+// Invite friend to current room
+window.inviteFriendToRoom = (friendId, friendName) => {
+    if (!roomState || !roomState.roomCode) {
+        showNotif('Error', 'You must be in a room to invite friends!', 'error');
+        console.error('Cannot invite: roomState =', roomState);
+        return;
+    }
+
+    console.log('Sending invite to:', friendId, 'Room code:', roomState.roomCode);
+
+    socket.emit('inviteFriendToRoom', {
+        friendId: friendId,
+        roomCode: roomState.roomCode,
+        roomName: roomState.id
+    });
+
+    showNotif('Invite Sent', `Invitation sent to ${friendName}!`, 'success');
+};
+
+// Receive room invitation
+socket.on('roomInvitation', (data) => {
+    console.log('Received room invitation:', data);
+
+    showNotif('Room Invite', `${data.fromName} invited you to ${data.roomName}!`, 'info');
+
+    const container = document.getElementById('notifications');
+    if (!container) {
+        console.error('Notifications container not found!');
+        return;
+    }
+
+    const notif = document.createElement('div');
+    notif.className = 'notif friend-request';
+    notif.innerHTML = `
+        <div class="notif-icon"><i class="bi bi-envelope-fill"></i></div>
+        <div class="notif-content">
+            <span class="notif-title">Room Invitation</span>
+            <span class="notif-msg">${data.fromName} invited you to join ${data.roomName}</span>
+            <div class="notif-actions">
+                <button class="notif-btn accept" onclick="acceptRoomInvite('${data.roomCode}', this)">
+                    <i class="bi bi-check-lg"></i> Join
+                </button>
+                <button class="notif-btn reject" onclick="rejectRoomInvite(this)">
+                    <i class="bi bi-x-lg"></i> Decline
+                </button>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(notif);
+    console.log('Room invitation notification added to DOM');
+
+    // Auto-remove after 30 seconds
+    setTimeout(() => {
+        if (notif.parentElement) {
+            notif.classList.add('fade-out');
+            setTimeout(() => notif.remove(), 500);
+        }
+    }, 30000);
+});
+
+window.acceptRoomInvite = (roomCode, btnElement) => {
+    console.log('Accepting room invite with code:', roomCode);
+
+    // Get current user name
+    const playerName = currentUser ? (currentUser.name || currentUser.username) : 'Chef';
+
+    // Join by room code - emit joinByCode to get room info first
+    socket.emit('joinByCode', { code: roomCode });
+
+    // Store the player name for when joinByCodeResult is received
+    window.pendingPlayerName = playerName;
+
+    // Remove notification
+    const notif = btnElement.closest('.notif');
+    if (notif) {
+        notif.classList.add('fade-out');
+        setTimeout(() => notif.remove(), 300);
+    }
+};
+
+window.rejectRoomInvite = (btnElement) => {
+    console.log('Rejecting room invite');
+
+    // Just remove notification
+    const notif = btnElement.closest('.notif');
+    if (notif) {
+        notif.classList.add('fade-out');
+        setTimeout(() => notif.remove(), 300);
+    }
+};
 
 // VS Scoreboard Update
 socket.on('scoreUpdate', (data) => {
     if (roomState && roomState.mode === 'multi_vs') {
+        // Sync the roomState player scores to the server data
+        if (data.scores) {
+            Object.entries(data.scores).forEach(([pId, score]) => {
+                if (roomState.players[pId]) roomState.players[pId].score = score;
+            });
+        }
         updateVSScoreboard(data.scores);
+        if (ui && roomState.players[playerId]) {
+            ui.updateScore(roomState.players[playerId].score, roomState.combo || 0);
+        }
     }
 });
 
@@ -1124,15 +2098,6 @@ window.showMenu = (menuId) => {
     }
 };
 
-// Invite Friend
-window.inviteFriend = (friendId) => {
-    if (roomState) {
-        socket.emit('inviteFriend', { friendId, roomId: roomState.id });
-        if (ui && typeof ui.showNotification === 'function') {
-            ui.showNotification('Invitation sent!', 'success');
-        }
-    }
-};
 
 // ============ PAUSE & LEAVE ============
 window.togglePauseMenu = () => {
@@ -1161,7 +2126,7 @@ window.togglePauseMenu = () => {
         } else {
             // MULTIPLAYER: NO PAUSE, JUST MENU
             isPaused = false;
-            if (resumeBtn) resumeBtn.style.display = 'none'; // Only "Close" via Escape or interaction
+            if (resumeBtn) resumeBtn.style.display = 'inline-block'; // Now enabled in multi!
             if (title) title.innerHTML = '<i class="bi bi-list"></i> Menu';
         }
     } else {
@@ -1173,12 +2138,12 @@ window.togglePauseMenu = () => {
 window.resumeGame = () => {
     const pauseMenu = document.getElementById('pause-menu');
     if (pauseMenu) pauseMenu.classList.add('hidden');
-    
+
     if (roomState && roomState.mode === 'single' && isPaused) {
         console.log('▶️ Emitting resumeGame to server');
         socket.emit('resumeGame'); // Tell server to resume timers
     }
-    
+
     isPaused = false;
 };
 
@@ -1536,6 +2501,39 @@ function handleWash() {
     return false;
 }
 
+function handleGarnish() {
+    if (!roomState || roomState.state !== 'playing') return;
+    const me = roomState.players[playerId];
+    if (!me) return;
+
+    let bestStationId = null;
+    let minDist = Infinity;
+    const reach = (gameConfig ? gameConfig.TILE_SIZE : 2) * 2.5;
+
+    const px = me.x !== undefined ? me.x : me.gridX * (gameConfig ? gameConfig.TILE_SIZE : 2);
+    const pz = me.z !== undefined ? me.z : me.gridZ * (gameConfig ? gameConfig.TILE_SIZE : 2);
+
+    for (const [id, st] of Object.entries(roomState.stations)) {
+        // Garnish works only at seasoning stations with ACTIVE rare spawn
+        if (st.type === 'seasoning' && st.rareSeasoning && st.contents && st.contents.type === 'plate' && !st.contents.seasoning) {
+            const sx = st.gridX * (gameConfig ? gameConfig.TILE_SIZE : 2);
+            const sz = st.gridZ * (gameConfig ? gameConfig.TILE_SIZE : 2);
+            const dist = Math.sqrt(Math.pow(px - sx, 2) + Math.pow(pz - sz, 2));
+
+            if (dist <= reach && dist < minDist) {
+                minDist = dist;
+                bestStationId = id;
+            }
+        }
+    }
+
+    if (bestStationId) {
+        socket.emit('garnishAction', { stationId: bestStationId });
+        return true;
+    }
+    return false;
+}
+
 // ============ GAME LOOP ============
 const clock = new THREE.Clock();
 
@@ -1584,11 +2582,11 @@ function animate() {
 
                 // Collision Detection (Slide along axes)
                 // Try X movement
-                if (!checkCollision(nextX, me.z, gameConfig.TILE_SIZE)) {
+                if (!checkCollision(nextX, me.z, gameConfig.TILE_SIZE) && !checkPlayerCollision(nextX, me.z, playerId)) {
                     me.x = nextX;
                 }
                 // Try Z movement
-                if (!checkCollision(me.x, nextZ, gameConfig.TILE_SIZE)) {
+                if (!checkCollision(me.x, nextZ, gameConfig.TILE_SIZE) && !checkPlayerCollision(me.x, nextZ, playerId)) {
                     me.z = nextZ;
                 }
 
@@ -1609,6 +2607,8 @@ function animate() {
                         } else if (handleRoll()) {
                             didChop = true;
                         } else if (handleWash()) {
+                            didChop = true;
+                        } else if (handleGarnish()) {
                             didChop = true;
                         }
 
@@ -1791,6 +2791,34 @@ function checkCollision(x, z, ts) {
     return false;
 }
 
+// Check collision with other players
+function checkPlayerCollision(x, z, currentPlayerId) {
+    if (!roomState || !roomState.players) return false;
+
+    const collisionRadius = 0.6; // Distance threshold for player collision
+
+    for (const [id, player] of Object.entries(roomState.players)) {
+        // Skip checking collision with self
+        if (id === currentPlayerId) continue;
+
+        // Get other player's position
+        const otherX = player.x !== undefined ? player.x : player.gridX * gameConfig.TILE_SIZE;
+        const otherZ = player.z !== undefined ? player.z : player.gridZ * gameConfig.TILE_SIZE;
+
+        // Calculate distance between players
+        const dx = x - otherX;
+        const dz = z - otherZ;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        // If too close, collision detected
+        if (distance < collisionRadius) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ============ QUICK CHAT & SHORTCUTS ============
 window.sendQuickChat = (msg) => {
     if (socket) socket.emit('chatMessage', msg);
@@ -1813,15 +2841,18 @@ window.toggleChatInput = () => {
 document.addEventListener('keydown', (e) => {
     // Escape or Enter handling when NOT focused on input
     if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-        if (e.key === 'Enter') {
-            toggleChatInput();
-            e.preventDefault();
-        }
+        // Multi-player only shortcuts
+        if (roomState && roomState.mode !== 'single') {
+            if (e.key === 'Enter') {
+                toggleChatInput();
+                e.preventDefault();
+            }
 
-        if (e.key === '1') sendQuickChat('Need help!');
-        if (e.key === '2') sendQuickChat('Coming!');
-        if (e.key === '3') sendQuickChat('Thanks!');
-        if (e.key === '4') sendQuickChat('Oops!');
+            if (e.key === '1') sendQuickChat('Need help!');
+            if (e.key === '2') sendQuickChat('Coming!');
+            if (e.key === '3') sendQuickChat('Thanks!');
+            if (e.key === '4') sendQuickChat('Oops!');
+        }
     }
 });
 
@@ -1977,7 +3008,7 @@ function updatePlayerHeldItem(playerId, holding) {
 function createHeldIngredient(group, content) {
     const ing = gameConfig.INGREDIENTS[content.name];
     let color = new THREE.Color(ing ? ing.color : 0xffffff);
-    
+
     if (content.burnt) {
         color.setHex(0x000000);
     } else if (content.cooked) {
@@ -2017,8 +3048,8 @@ function createHeldIngredient(group, content) {
             for (let i = 0; i < 4; i++) {
                 const shred = new THREE.Mesh(
                     new THREE.PlaneGeometry(0.08, 0.06),
-                    new THREE.MeshStandardMaterial({ 
-                        color: color, 
+                    new THREE.MeshStandardMaterial({
+                        color: color,
                         side: THREE.DoubleSide,
                         roughness: 0.9
                     })
@@ -2066,7 +3097,7 @@ function createHeldIngredient(group, content) {
             );
             core.scale.set(1.2, 0.5, 1);
             group.add(core);
-            
+
             // Bone
             const boneMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
             const bone = new THREE.Mesh(
@@ -2074,7 +3105,7 @@ function createHeldIngredient(group, content) {
                 boneMat
             );
             group.add(bone);
-            
+
             // Fat rim
             const fat = new THREE.Mesh(
                 new THREE.TorusGeometry(0.11, 0.02, 8, 16, Math.PI * 1.5),
@@ -2091,7 +3122,7 @@ function createHeldIngredient(group, content) {
             );
             body.scale.set(1.5, 0.6, 0.5);
             group.add(body);
-            
+
             // Tail
             const tail = new THREE.Mesh(
                 new THREE.ConeGeometry(0.06, 0.12, 3),
@@ -2100,7 +3131,7 @@ function createHeldIngredient(group, content) {
             tail.position.set(0.18, 0, 0);
             tail.rotation.z = -Math.PI / 2;
             group.add(tail);
-            
+
             // Eye
             const eye = new THREE.Mesh(
                 new THREE.SphereGeometry(0.02, 8, 8),
@@ -2116,7 +3147,7 @@ function createHeldIngredient(group, content) {
             );
             stem.position.y = -0.02;
             group.add(stem);
-            
+
             const cap = new THREE.Mesh(
                 new THREE.SphereGeometry(0.12, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
                 mat
@@ -2131,13 +3162,13 @@ function createHeldIngredient(group, content) {
             );
             bulb.scale.y = 0.9;
             group.add(bulb);
-            
+
             if (content.name === 'tomato') {
                 // Tomato segments
                 for (let seg = 0; seg < 6; seg++) {
                     const segment = new THREE.Mesh(
                         new THREE.BoxGeometry(0.008, 0.2, 0.008),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: content.burnt ? 0x000000 : 0xC0392B,
                             roughness: 0.8
                         })
@@ -2151,7 +3182,7 @@ function createHeldIngredient(group, content) {
                     segment.rotation.y = angle;
                     group.add(segment);
                 }
-                
+
                 // Green stem/calyx
                 const stemMat = new THREE.MeshStandardMaterial({ color: 0x27ae60 });
                 const stem = new THREE.Mesh(
@@ -2160,7 +3191,7 @@ function createHeldIngredient(group, content) {
                 );
                 stem.position.y = 0.1;
                 group.add(stem);
-                
+
                 // Calyx leaves
                 for (let cl = 0; cl < 5; cl++) {
                     const leaf = new THREE.Mesh(
@@ -2181,7 +3212,7 @@ function createHeldIngredient(group, content) {
                 for (let layer = 0; layer < 3; layer++) {
                     const ring = new THREE.Mesh(
                         new THREE.TorusGeometry(0.09 - layer * 0.015, 0.003, 8, 16),
-                        new THREE.MeshStandardMaterial({ 
+                        new THREE.MeshStandardMaterial({
                             color: content.burnt ? 0x000000 : 0xE8D5B7,
                             transparent: true,
                             opacity: 0.6
@@ -2191,7 +3222,7 @@ function createHeldIngredient(group, content) {
                     ring.position.y = 0.02 + layer * 0.03;
                     group.add(ring);
                 }
-                
+
                 // Green sprout
                 const sprout = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.006, 0.008, 0.07, 6),
@@ -2204,19 +3235,19 @@ function createHeldIngredient(group, content) {
             // Lettuce head with leaves
             const lettuceCore = new THREE.Mesh(
                 new THREE.SphereGeometry(0.05, 12, 12),
-                new THREE.MeshStandardMaterial({ 
+                new THREE.MeshStandardMaterial({
                     color: content.burnt ? 0x000000 : 0xC8E6C9
                 })
             );
             lettuceCore.scale.y = 0.6;
             group.add(lettuceCore);
-            
+
             // Lettuce leaves
             for (let i = 0; i < 5; i++) {
                 const leaf = new THREE.Mesh(
                     new THREE.PlaneGeometry(0.12, 0.1),
-                    new THREE.MeshStandardMaterial({ 
-                        color: color, 
+                    new THREE.MeshStandardMaterial({
+                        color: color,
                         side: THREE.DoubleSide,
                         roughness: 0.9
                     })
@@ -2242,14 +3273,14 @@ function createHeldIngredient(group, content) {
             );
             bunTop.position.y = 0.02;
             group.add(bunTop);
-            
+
             const bunBottom = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.12, 0.11, 0.04, 16),
                 mat
             );
             bunBottom.position.y = -0.02;
             group.add(bunBottom);
-            
+
             // Sesame seeds
             const seedMat = new THREE.MeshStandardMaterial({ color: 0xFFFACD });
             for (let s = 0; s < 6; s++) {
@@ -2273,9 +3304,9 @@ function createHeldIngredient(group, content) {
             );
             doughBall.scale.set(1, 0.7, 1);
             group.add(doughBall);
-            
+
             // Flour dusting
-            const flourMat = new THREE.MeshStandardMaterial({ 
+            const flourMat = new THREE.MeshStandardMaterial({
                 color: 0xFFFFF0,
                 transparent: true,
                 opacity: 0.5
@@ -2302,12 +3333,12 @@ function createHeldIngredient(group, content) {
             );
             cheese.rotation.x = Math.PI / 2;
             group.add(cheese);
-            
+
             // Cheese holes
             for (let h = 0; h < 3; h++) {
                 const hole = new THREE.Mesh(
                     new THREE.SphereGeometry(0.015 + Math.random() * 0.01, 8, 8),
-                    new THREE.MeshStandardMaterial({ 
+                    new THREE.MeshStandardMaterial({
                         color: 0xFFE082,
                         roughness: 0.6
                     })
@@ -2327,7 +3358,7 @@ function createHeldIngredient(group, content) {
             );
             rice.scale.set(1, 0.6, 1);
             group.add(rice);
-            
+
             // Rice grains on top
             for (let i = 0; i < 12; i++) {
                 const grain = new THREE.Mesh(
@@ -2354,12 +3385,12 @@ function createHeldIngredient(group, content) {
             );
             egg.scale.set(0.8, 1, 0.8);
             group.add(egg);
-            
+
             // Egg texture (subtle speckles)
             for (let sp = 0; sp < 5; sp++) {
                 const speckle = new THREE.Mesh(
                     new THREE.SphereGeometry(0.005, 6, 6),
-                    new THREE.MeshStandardMaterial({ 
+                    new THREE.MeshStandardMaterial({
                         color: 0xD4A574,
                         transparent: true,
                         opacity: 0.4
@@ -2393,8 +3424,8 @@ function createHeldIngredient(group, content) {
 // Create held plate visual
 function createHeldPlate(group, content) {
     // Simple elegant plate
-    const plateMat = new THREE.MeshStandardMaterial({ 
-        color: 0xffffff, 
+    const plateMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
         roughness: 0.1,
         metalness: 0.1
     });
@@ -2403,7 +3434,7 @@ function createHeldPlate(group, content) {
         plateMat
     );
     group.add(plate);
-    
+
     // Plate rim
     const rim = new THREE.Mesh(
         new THREE.TorusGeometry(0.18, 0.008, 8, 24),
@@ -2419,7 +3450,7 @@ function createHeldPlate(group, content) {
         // Check if it's a pizza (has dough)
         const isPizza = ings.includes('dough');
         const isBurger = ings.includes('bread') && ings.includes('meat');
-        
+
         if (isPizza) {
             // Pizza: show dough base with toppings
             const doughColor = content.burnt ? 0x000000 : 0xF5DEB3;
@@ -2429,7 +3460,7 @@ function createHeldPlate(group, content) {
             );
             base.position.y = 0.04;
             group.add(base);
-            
+
             // Tomato sauce
             if (ings.includes('tomato')) {
                 const sauce = new THREE.Mesh(
@@ -2439,7 +3470,7 @@ function createHeldPlate(group, content) {
                 sauce.position.y = 0.055;
                 group.add(sauce);
             }
-            
+
             // Shredded cheese
             if (ings.includes('cheese')) {
                 for (let s = 0; s < 12; s++) {
@@ -2465,7 +3496,7 @@ function createHeldPlate(group, content) {
                 const ingConfig = gameConfig.INGREDIENTS[ingName];
                 let color = new THREE.Color(ingConfig ? ingConfig.color : 0x777777);
                 if (content.burnt) color.setHex(0x000000);
-                
+
                 const layer = new THREE.Mesh(
                     new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16),
                     new THREE.MeshStandardMaterial({ color })
@@ -2480,7 +3511,7 @@ function createHeldPlate(group, content) {
                 const ingConfig = gameConfig.INGREDIENTS[ingName];
                 let color = new THREE.Color(ingConfig ? ingConfig.color : 0x777777);
                 if (content.burnt) color.setHex(0x000000);
-                
+
                 const piece = new THREE.Mesh(
                     new THREE.SphereGeometry(0.03, 8, 8),
                     new THREE.MeshStandardMaterial({ color })
@@ -2495,7 +3526,7 @@ function createHeldPlate(group, content) {
                 group.add(piece);
             });
         }
-        
+
         // Add steam if cooked
         if (content.cooked && content.cooked.length > 0 && !content.burnt) {
             addHeldSteam(group);
@@ -2506,12 +3537,12 @@ function createHeldPlate(group, content) {
 // Add simple steam effect for held items
 function addHeldSteam(group) {
     // Create a few steam particles
-    const steamMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.3 
+    const steamMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.3
     });
-    
+
     for (let i = 0; i < 3; i++) {
         const steam = new THREE.Mesh(
             new THREE.SphereGeometry(0.02, 6, 6),
@@ -2692,8 +3723,10 @@ function populateInGameGuide() {
             <ul>
                 <li><strong>WASD / Arrows</strong> - Move</li>
                 <li><strong>SPACE</strong> - Interact / Hold to process</li>
+                ${roomState && roomState.mode !== 'single' ? `
                 <li><strong>ENTER</strong> - Chat</li>
                 <li><strong>1-4</strong> - Quick chat</li>
+                ` : ''}
             </ul>
         </div>
 

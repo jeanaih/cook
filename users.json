@@ -1,0 +1,76 @@
+{
+  "user_chef123": {
+    "id": "user_chef123",
+    "username": "chef123",
+    "name": "chef123",
+    "type": "account",
+    "password": "$2b$10$JDWNi.iE1gT/xQR2c6tEve./qeZkrCb6zk9KW20fJDe0l2ZD0aSVS",
+    "createdAt": 1771597383895,
+    "stats": {
+      "gamesPlayed": 0,
+      "scoreTotal": 0,
+      "dishesServed": 0,
+      "achievements": []
+    }
+  },
+  "user_naih": {
+    "id": "user_naih",
+    "username": "naih",
+    "name": "naih",
+    "type": "account",
+    "password": "$2b$10$2g1MjgglkDVuxq/L2dY/GuERZc8VgS6tUpprONawYaYYGe1ylnILe",
+    "createdAt": 1771597723353,
+    "stats": {
+      "gamesPlayed": 0,
+      "scoreTotal": 0,
+      "dishesServed": 0,
+      "achievements": []
+    },
+    "friendRequests": [],
+    "friends": [
+      "user_moriah",
+      "user_kei"
+    ],
+    "profileImage": "chef_2"
+  },
+  "user_kei": {
+    "id": "user_kei",
+    "username": "kei",
+    "name": "kei",
+    "type": "account",
+    "password": "$2b$10$0MeuyXI6MeCIBEspclnCMu5RnYJGGQ1x/9w8gfJ7Y/ZhZfINKkg4K",
+    "createdAt": 1771601805673,
+    "stats": {
+      "gamesPlayed": 0,
+      "scoreTotal": 0,
+      "dishesServed": 0,
+      "achievements": []
+    },
+    "friendRequests": [],
+    "friends": [
+      "user_naih",
+      "user_moriah"
+    ],
+    "profileImage": "chef_2"
+  },
+  "user_moriah": {
+    "id": "user_moriah",
+    "username": "moriah",
+    "name": "moriah",
+    "type": "account",
+    "password": "$2b$10$jWftWPHiYPRxGtdRy.rm5uLNcWKBxIITyztsm.0jJTk3jYXE.thAa",
+    "createdAt": 1771603031923,
+    "stats": {
+      "gamesPlayed": 0,
+      "scoreTotal": 0,
+      "dishesServed": 0,
+      "achievements": []
+    },
+    "friends": [
+      "user_naih",
+      "user_kei"
+    ],
+    "friendRequests": [],
+    "profileImage": "chef_1"
+  }
+}

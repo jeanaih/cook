@@ -16,6 +16,9 @@
 </head>
 
 <body>
+    <!-- NOTIFICATIONS -->
+    <div id="notifications" class="notifications-container"></div>
+
     <!-- ========== LOBBY SCREEN ========== -->
     <div id="lobby-screen" class="screen active">
         <div class="lobby-bg"></div>
@@ -29,10 +32,82 @@
                 <p class="logo-subtitle">Multiplayer Kitchen Chaos!</p>
             </div>
 
-            <!-- NAME INPUT (Always visible on top of menus) -->
-            <div class="name-input-container">
-                <label for="player-name"><i class="bi bi-person"></i> YOUR CHEF NAME</label>
-                <input type="text" id="player-name" placeholder="Enter Name..." maxlength="12" value="Chef">
+            <!-- LOGIN OVERLAY (Full Auth System) -->
+            <div id="login-overlay" class="login-overlay">
+                <div class="login-card">
+                    <div class="login-tabs">
+                        <button class="login-tab-btn active" onclick="switchLoginTab('login')">Login</button>
+                        <button class="login-tab-btn" onclick="switchLoginTab('register')">Register</button>
+                        <button class="login-tab-btn" onclick="switchLoginTab('guest')">Guest</button>
+                    </div>
+
+                    <!-- LOGIN FORM -->
+                    <div id="form-login" class="auth-form active">
+                        <h2 class="login-title"><i class="bi bi-person-check"></i> Welcome Back</h2>
+                        <div class="login-input-group">
+                            <label>USERNAME</label>
+                            <input type="text" id="login-username" placeholder="Enter Username..." maxlength="12">
+                        </div>
+                        <div class="login-input-group">
+                            <label>PASSWORD</label>
+                            <input type="password" id="login-password" placeholder="Enter Password...">
+                        </div>
+                        <button class="btn-login-main" onclick="handleLogin()">
+                            <i class="bi bi-box-arrow-in-right"></i> Login
+                        </button>
+                    </div>
+
+                    <!-- REGISTER FORM -->
+                    <div id="form-register" class="auth-form">
+                        <h2 class="login-title"><i class="bi bi-person-plus"></i> Create Account</h2>
+                        <div class="login-input-group">
+                            <label>CHOOSE USERNAME</label>
+                            <input type="text" id="register-username" placeholder="Username (3-12 chars)"
+                                maxlength="12">
+                        </div>
+                        <div class="login-input-group">
+                            <label>CHOOSE PASSWORD</label>
+                            <input type="password" id="register-password" placeholder="Password (min 6 chars)">
+                        </div>
+                        <div class="login-input-group">
+                            <label>CONFIRM PASSWORD</label>
+                            <input type="password" id="register-confirm-password" placeholder="Repeat password">
+                        </div>
+                        <button class="btn-login-main register" onclick="handleRegister()">
+                            <i class="bi bi-check-circle"></i> Create Account
+                        </button>
+                    </div>
+
+                    <!-- GUEST FORM -->
+                    <div id="form-guest" class="auth-form">
+                        <h2 class="login-title"><i class="bi bi-person-walking"></i> Play as Guest</h2>
+                        <p class="login-subtitle">Quick access without an account</p>
+                        <div class="login-input-group">
+                            <label>CHEF NAME</label>
+                            <input type="text" id="guest-name" placeholder="Enter Name..." maxlength="12" value="Chef">
+                        </div>
+                        <button class="btn-login-guest" onclick="loginGuest()">
+                            <i class="bi bi-play-fill"></i> Continue as Guest
+                        </button>
+                    </div>
+
+                    <p class="login-footer" id="auth-hint">Secure your progress by creating an account!</p>
+                </div>
+            </div>
+
+            <!-- USER PROFILE (Shown when logged in) -->
+            <div id="user-profile" class="user-profile hidden">
+                <div class="user-avatar">
+                    <i class="bi bi-person-circle"></i>
+                </div>
+                <div class="user-details" onclick="openProfileCustomization()" title="Edit Profile">
+                    <span class="user-name" id="display-user-name">Chef</span>
+                    <span class="user-status"><i class="bi bi-circle-fill status-icon"></i> Online <span
+                            class="edit-hint">(Edit Profile)</span></span>
+                </div>
+                <button class="btn-logout" onclick="logout()" title="Logout">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
             </div>
 
             <!-- CONNECTION STATUS -->
@@ -42,41 +117,68 @@
 
             <!-- MENU 1: MAIN MENU -->
             <div id="menu-main" class="lobby-menu active">
-                <button class="menu-btn" onclick="showMenu('single')">
-                    <i class="bi bi-person-fill btn-icon"></i>
-                    <div class="btn-text">
-                        <span class="btn-title">Single Player</span>
-                        <span class="btn-desc">Practice offline</span>
+                <div class="main-menu-layout">
+                    <div class="menu-buttons-column">
+                        <button class="menu-btn compact" onclick="showMenu('single')">
+                            <i class="bi bi-person-fill btn-icon"></i>
+                            <div class="btn-text">
+                                <span class="btn-title">Single Player</span>
+                                <span class="btn-desc">Practice offline</span>
+                            </div>
+                        </button>
+                        <button class="menu-btn compact" onclick="showMenu('create')">
+                            <i class="bi bi-house-door-fill btn-icon"></i>
+                            <div class="btn-text">
+                                <span class="btn-title">Create Lobby</span>
+                                <span class="btn-desc">Host a new game</span>
+                            </div>
+                        </button>
+                        <button class="menu-btn compact" onclick="showMenu('join')">
+                            <i class="bi bi-search btn-icon"></i>
+                            <div class="btn-text">
+                                <span class="btn-title">Join Room</span>
+                                <span class="btn-desc">Browse servers</span>
+                            </div>
+                        </button>
+                        <button class="menu-btn compact" onclick="showGuideBook()">
+                            <i class="bi bi-info-circle-fill btn-icon"></i>
+                            <div class="btn-text">
+                                <span class="btn-title">How to Play</span>
+                                <span class="btn-desc">Cooking guide & tips</span>
+                            </div>
+                        </button>
                     </div>
-                </button>
-                <button class="menu-btn" onclick="showMenu('create')">
-                    <i class="bi bi-house-door-fill btn-icon"></i>
-                    <div class="btn-text">
-                        <span class="btn-title">Create Lobby</span>
-                        <span class="btn-desc">Host a new game</span>
+
+                    <!-- FRIENDS PANEL (Right Side) -->
+                    <div class="friends-panel" id="main-menu-friends-panel">
+                        <div class="friends-panel-header">
+                            <i class="bi bi-people-fill"></i> Friends
+                        </div>
+
+                        <!-- Add Friend Section (Only for registered users) -->
+                        <div class="friends-panel-add" id="friends-panel-add-section">
+                            <input type="text" id="friends-panel-add-input" placeholder="Add friend..." maxlength="12">
+                            <button class="btn-add-friend" onclick="addFriendFromPanel()" title="Add Friend">
+                                <i class="bi bi-person-plus-fill"></i>
+                            </button>
+                        </div>
+
+                        <!-- Friend Requests Section -->
+                        <div class="friend-requests-section" id="friend-requests-section" style="display: none;">
+                            <div class="friend-requests-header">
+                                <i class="bi bi-bell-fill"></i> Friend Requests
+                                <span class="request-count" id="request-count">0</span>
+                            </div>
+                            <div class="friend-requests-list" id="friend-requests-list">
+                                <!-- Friend requests will be populated here -->
+                            </div>
+                        </div>
+
+                        <div class="friends-panel-list" id="main-menu-friends-list">
+                            <p class="friends-empty-msg">Login to see your friends</p>
+                        </div>
                     </div>
-                </button>
-                <button class="menu-btn" onclick="showMenu('join')">
-                    <i class="bi bi-search btn-icon"></i>
-                    <div class="btn-text">
-                        <span class="btn-title">Join Room</span>
-                        <span class="btn-desc">Browse servers</span>
-                    </div>
-                </button>
-                <button class="menu-btn" onclick="showMenu('friends')">
-                    <i class="bi bi-people-fill btn-icon"></i>
-                    <div class="btn-text">
-                        <span class="btn-title">Friends</span>
-                        <span class="btn-desc">Manage friends</span>
-                    </div>
-                </button>
-                <button class="menu-btn" onclick="showGuideBook()">
-                    <i class="bi bi-info-circle-fill btn-icon"></i>
-                    <div class="btn-text">
-                        <span class="btn-title">How to Play</span>
-                        <span class="btn-desc">Cooking guide & tips</span>
-                    </div>
-                </button>
+                </div>
             </div>
 
             <!-- MENU 2: SINGLE PLAYER SETUP -->
@@ -128,10 +230,6 @@
                     <input type="text" id="create-room-name" placeholder="e.g. MyKitchen">
                 </div>
 
-                <div class="input-group" style="margin-top: 15px;">
-                    <label><i class="bi bi-file-text"></i> Room Description (Optional)</label>
-                    <input type="text" id="create-room-desc" placeholder="Describe your room...">
-                </div>
 
                 <div class="input-group" style="margin-top: 15px;">
                     <label>
@@ -207,9 +305,14 @@
             <!-- MENU 5: FRIENDS -->
             <div id="menu-friends" class="lobby-menu hidden">
                 <h2 class="menu-title"><i class="bi bi-people-fill"></i> Friends</h2>
-                <div class="friends-section">
+                <div id="friends-guest-warning" class="friends-guest-warning hidden">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <p>You need to be logged in with a registered account to add friends.</p>
+                    <p>Guest accounts cannot use the friends feature.</p>
+                </div>
+                <div class="friends-section" id="friends-section-content">
                     <div class="add-friend-section">
-                        <input type="text" id="add-friend-input" placeholder="Enter friend's name or ID">
+                        <input type="text" id="add-friend-input" placeholder="Enter friend's username">
                         <button class="btn-sm" onclick="addFriend()"><i class="bi bi-person-plus"></i> Add</button>
                     </div>
                     <div id="friends-list" class="friends-list">
@@ -236,44 +339,55 @@
 
             <!-- WAITING ROOM (After joining/creating) -->
             <div id="menu-waiting" class="lobby-menu hidden">
-                <h2 class="menu-title" id="waiting-room-name">Room: ...</h2>
-                <div id="room-code-display" class="room-code-display">
-                    <label>Room Code:</label>
-                    <div class="room-code-value" id="room-code-value">------</div>
-                    <button class="btn-sm" onclick="copyRoomCode()"><i class="bi bi-clipboard"></i> Copy</button>
-                </div>
+                <div class="waiting-room-layout">
+                    <div class="waiting-room-main">
+                        <h2 class="menu-title" id="waiting-room-name">Room: ...</h2>
+                        <div id="room-code-display" class="room-code-display">
+                            <label>Room Code:</label>
+                            <div class="room-code-value" id="room-code-value">------</div>
+                            <button class="btn-sm" onclick="copyRoomCode()"><i class="bi bi-clipboard"></i>
+                                Copy</button>
+                        </div>
 
-                <div id="room-info" class="room-info">
-                    <div class="info-item"><i class="bi bi-info-circle"></i> <span id="room-mode-display"></span></div>
-                    <div class="info-item"><i class="bi bi-bar-chart"></i> <span id="room-difficulty-display"></span>
+                        <div id="room-info" class="room-info">
+                            <div class="info-item"><i class="bi bi-info-circle"></i> <span
+                                    id="room-mode-display"></span></div>
+                            <div class="info-item"><i class="bi bi-bar-chart"></i> <span
+                                    id="room-difficulty-display"></span>
+                            </div>
+                            <div class="info-item"><i class="bi bi-people"></i> <span id="room-players-display"></span>
+                            </div>
+                        </div>
+
+                        <div class="players-waiting-box">
+                            <h3><i class="bi bi-people-fill"></i> Chefs Ready:</h3>
+                            <div id="waiting-player-list" class="player-list"></div>
+                        </div>
+
+                        <!-- QUICK CHAT IN LOBBY REMOVED -->
+
+                        <div class="menu-actions">
+                            <button class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i>
+                                Leave</button>
+                            <button id="btn-ready" class="btn-primary hidden"><i class="bi bi-check-circle"></i> I'm
+                                Ready</button>
+                            <button id="btn-start-multi" class="btn-primary hidden"><i class="bi bi-play-fill"></i>
+                                Start
+                                Game</button>
+                        </div>
+                        <p id="waiting-hint" class="waiting-hint">Waiting for host to start...</p>
                     </div>
-                    <div class="info-item"><i class="bi bi-people"></i> <span id="room-players-display"></span></div>
-                </div>
 
-                <div class="players-waiting-box">
-                    <h3><i class="bi bi-people-fill"></i> Chefs Ready:</h3>
-                    <div id="waiting-player-list" class="player-list"></div>
+                    <!-- FRIENDS INVITE PANEL (Right Side) -->
+                    <div class="waiting-friends-panel" id="waiting-friends-panel">
+                        <div class="waiting-friends-header">
+                            <i class="bi bi-people-fill"></i> Invite Friends
+                        </div>
+                        <div class="waiting-friends-list" id="waiting-friends-list">
+                            <p class="friends-empty-msg">No friends online</p>
+                        </div>
+                    </div>
                 </div>
-
-                <!-- QUICK CHAT IN LOBBY -->
-                <div class="quick-chat-lobby">
-                    <button class="quick-chat-btn" onclick="sendQuickChat('Need help!')"><i
-                            class="bi bi-exclamation-circle"></i> Help!</button>
-                    <button class="quick-chat-btn" onclick="sendQuickChat('Coming!')"><i
-                            class="bi bi-arrow-right-circle"></i> Coming!</button>
-                    <button class="quick-chat-btn" onclick="sendQuickChat('Ready!')"><i class="bi bi-check-circle"></i>
-                        Ready!</button>
-                </div>
-
-                <div class="menu-actions">
-                    <button class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i>
-                        Leave</button>
-                    <button id="btn-ready" class="btn-primary hidden"><i class="bi bi-check-circle"></i> I'm
-                        Ready</button>
-                    <button id="btn-start-multi" class="btn-primary hidden"><i class="bi bi-play-fill"></i> Start
-                        Game</button>
-                </div>
-                <p id="waiting-hint" class="waiting-hint">Waiting for host to start...</p>
             </div>
 
         </div>
@@ -315,16 +429,20 @@
                 </button>
                 <div class="side-chat-divider"></div>
                 <button class="side-chat-btn" onclick="sendQuickChat('Need help!')" title="Help (1)">
-                    <span class="key-hint">1</span> <i class="bi bi-exclamation-circle"></i>
+                    <span class="key-hint">1</span>
+                    <i class="bi bi-exclamation-circle"></i>
                 </button>
                 <button class="side-chat-btn" onclick="sendQuickChat('Coming!')" title="Coming (2)">
-                    <span class="key-hint">2</span> <i class="bi bi-arrow-right-circle"></i>
+                    <span class="key-hint">2</span>
+                    <i class="bi bi-arrow-right-circle"></i>
                 </button>
                 <button class="side-chat-btn" onclick="sendQuickChat('Thanks!')" title="Thanks (3)">
-                    <span class="key-hint">3</span> <i class="bi bi-heart"></i>
+                    <span class="key-hint">3</span>
+                    <i class="bi bi-heart"></i>
                 </button>
                 <button class="side-chat-btn" onclick="sendQuickChat('Oops!')" title="Oops (4)">
-                    <span class="key-hint">4</span> <i class="bi bi-emoji-frown"></i>
+                    <span class="key-hint">4</span>
+                    <i class="bi bi-emoji-frown"></i>
                 </button>
             </div>
 
@@ -419,14 +537,19 @@
             <h1 class="gameover-title"><i class="bi bi-stopwatch"></i> Time's Up!</h1>
             <div class="gameover-score">
                 <div class="final-score" id="final-score">0</div>
-                <div class="score-label-big">Points</div>
+                <div class="score-label-big"></div>
             </div>
             <div class="gameover-stats" id="gameover-stats"></div>
             <div class="gameover-players" id="gameover-players"></div>
             <div class="star-rating" id="star-rating"></div>
-            <button class="btn-primary btn-restart" id="btn-restart">
-                <i class="bi bi-arrow-clockwise"></i> Play Again!
-            </button>
+            <div class="gameover-actions">
+                <button class="btn-primary btn-restart" id="btn-restart">
+                    <i class="bi bi-arrow-clockwise"></i> Play Again!
+                </button>
+                <button class="btn-secondary btn-exit" id="btn-exit-game">
+                    <i class="bi bi-door-closed-fill"></i> Exit Game
+                </button>
+            </div>
         </div>
     </div>
 
@@ -450,6 +573,62 @@
             <div class="modal-actions">
                 <button class="btn-secondary" onclick="closeKickModal()">Cancel</button>
                 <button class="btn-danger" onclick="confirmKick()">Kick</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL FOR PROFILE CUSTOMIZATION -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="modal-content profile-customize-card">
+            <h2 class="modal-title"><i class="bi bi-person-gear"></i> Profile Customization</h2>
+
+            <div class="profile-preview-section">
+                <div class="preview-avatar-container">
+                    <img id="profile-preview-img" src="/assets/avatars/chef1.jpg" alt="Preview">
+                </div>
+                <div class="preview-details">
+                    <span class="preview-label">PREVIEW</span>
+                    <h3 id="profile-preview-name">Chef</h3>
+                </div>
+            </div>
+
+            <div class="custom-section">
+                <label class="custom-label">CHANGE USERNAME</label>
+                <div class="input-with-icon">
+                    <i class="bi bi-pencil-square"></i>
+                    <input type="text" id="profile-new-username" placeholder="Enter new username..." maxlength="12"
+                        oninput="updateProfilePreview()">
+                </div>
+            </div>
+
+            <div class="custom-section">
+                <label class="custom-label">CHOOSE AVATAR</label>
+                <div class="avatar-grid">
+                    <div class="avatar-option selected" data-key="chef_1" onclick="selectAvatar('chef_1', this)">
+                        <img src="/assets/avatars/chef1.jpg" alt="Avatar 1">
+                    </div>
+                    <div class="avatar-option" data-key="chef_2" onclick="selectAvatar('chef_2', this)">
+                        <img src="/assets/avatars/chef2.jpg" alt="Avatar 2">
+                    </div>
+                    <div class="avatar-option" data-key="chef_3" onclick="selectAvatar('chef_3', this)">
+                        <img src="/assets/avatars/chef3.jpg" alt="Avatar 3">
+                    </div>
+                    <div class="avatar-option" data-key="chef_4" onclick="selectAvatar('chef_4', this)">
+                        <img src="/assets/avatars/chef4.jpg" alt="Avatar 4">
+                    </div>
+                    <div class="avatar-option" data-key="chef_5" onclick="selectAvatar('chef_5', this)">
+                        <img src="/assets/avatars/chef5.jpg" alt="Avatar 5">
+                    </div>
+                    <div class="avatar-option" data-key="chef_6" onclick="selectAvatar('chef_6', this)">
+                        <img src="/assets/avatars/chef6.jpg" alt="Avatar 6">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeProfileModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveProfileChanges()"><i class="bi bi-check-all"></i> Save
+                    Changes</button>
             </div>
         </div>
     </div>
