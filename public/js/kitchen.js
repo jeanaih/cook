@@ -5943,21 +5943,32 @@ export class KitchenRenderer {
                 const now = Date.now();
                 const isChopping = sm.lastChopUpdate && (now - sm.lastChopUpdate) < 300;
                 if (isChopping) {
-                    const angle = now * 0.04; // Faster animation
+                    const angle = now * 0.04;
                     const chopCycle = Math.sin(angle);
                     
-                    // More dramatic up-down motion
-                    const height = Math.abs(chopCycle) * 0.45;
+                    // Knife moves to center of board and chops
+                    const restX = this.ts * 0.25;
+                    const restZ = -this.ts * 0.2;
+                    const chopX = 0; // Center of board
+                    const chopZ = 0; // Center of board
                     
-                    // Realistic chopping motion - rotate and lift
-                    knife.rotation.x = Math.PI * 0.2 + chopCycle * 0.35;
-                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.25) + height;
-                    knife.position.x = chopCycle * 0.05; // Slight forward motion
-                    knife.rotation.z = chopCycle * 0.08; // Slight twist
+                    // Interpolate position - move to center when chopping
+                    const moveProgress = Math.max(0, chopCycle); // 0 to 1
+                    knife.position.x = restX + (chopX - restX) * moveProgress;
+                    knife.position.z = restZ + (chopZ - restZ) * moveProgress;
                     
-                    // Add impact effect when knife hits board
+                    // Up-down chopping motion
+                    const height = Math.abs(chopCycle) * 0.5;
+                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.15) + height;
+                    
+                    // Rotate knife for chopping motion
+                    knife.rotation.x = chopCycle * 0.4; // Tilt forward/back
+                    knife.rotation.y = 0.3 + moveProgress * -0.3; // Straighten when chopping
+                    knife.rotation.z = chopCycle * 0.1; // Slight roll
+                    
+                    // Impact effect when knife hits board
                     if (chopCycle < -0.9) {
-                        knife.position.y -= 0.02; // Impact compression
+                        knife.position.y -= 0.03;
                     }
 
                     if (!sm.chopParticles) {
@@ -5968,12 +5979,11 @@ export class KitchenRenderer {
                     
                     const content = sm.group.getObjectByName('contents');
                     
-                    // More particles on impact
+                    // Spawn particles on impact
                     if (content && chopCycle < -0.85 && Math.random() < 0.6) {
                         const ingMesh = content.children[0];
                         const color = (ingMesh && ingMesh.material) ? ingMesh.material.color : 0xffffff;
                         
-                        // Create multiple particles per chop
                         for (let i = 0; i < 2; i++) {
                             const size = 0.04 + Math.random() * 0.04;
                             const p = new THREE.Mesh(
@@ -5981,9 +5991,9 @@ export class KitchenRenderer {
                                 new THREE.MeshBasicMaterial({ color, transparent: true })
                             );
                             p.position.set(
-                                (Math.random() - 0.5) * 0.1, 
+                                (Math.random() - 0.5) * 0.15, 
                                 (sm.baseMesh.position.y * 2 + 0.35), 
-                                (Math.random() - 0.5) * 0.1
+                                (Math.random() - 0.5) * 0.15
                             );
                             p.userData = { 
                                 vx: (Math.random() - 0.5) * 5, 
@@ -5997,7 +6007,7 @@ export class KitchenRenderer {
                         }
                     }
                     
-                    // Enhanced ingredient shake effect
+                    // Ingredient shake effect
                     if (content) {
                         const shake = Math.abs(chopCycle) > 0.85 ? 0.25 : 0.1;
                         content.scale.setScalar(1 + Math.sin(angle * 4) * shake);
@@ -6006,11 +6016,17 @@ export class KitchenRenderer {
                         content.rotation.y = Math.sin(angle * 8) * 0.15;
                     }
                 } else {
-                    // Smooth return to rest position
-                    knife.position.x += (0.3 - knife.position.x) * 0.12;
-                    knife.position.y += (sm.baseMesh.position.y * 2 + 0.06 - knife.position.y) * 0.12;
-                    knife.rotation.z += (Math.PI / 2 - knife.rotation.z) * 0.12;
+                    // Smooth return to rest position beside board
+                    const restX = this.ts * 0.25;
+                    const restY = sm.baseMesh.position.y * 2 + 0.1;
+                    const restZ = -this.ts * 0.2;
+                    
+                    knife.position.x += (restX - knife.position.x) * 0.12;
+                    knife.position.y += (restY - knife.position.y) * 0.12;
+                    knife.position.z += (restZ - knife.position.z) * 0.12;
                     knife.rotation.x *= 0.85;
+                    knife.rotation.y += (0.3 - knife.rotation.y) * 0.12;
+                    knife.rotation.z *= 0.85;
                     
                     // Reset content position
                     const content = sm.group.getObjectByName('contents');
