@@ -84,6 +84,65 @@ app.delete('/api/delete-map/:name', (req, res) => {
     }
 });
 
+// ============ LEADERBOARD API ============
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const category = req.query.category || 'score'; // score, wins, dishes
+
+        // Filter only registered users (not guests)
+        const registeredUsers = Object.entries(users)
+            .filter(([id, user]) => user.type === 'account')
+            .map(([id, user]) => ({
+                id: id,
+                uid: user.uid || id,
+                username: user.username || user.name,
+                profileImage: user.profileImage || 'chef_1',
+                level: user.level || 1,
+                stats: user.stats || {}
+            }));
+
+        // Sort based on category
+        let sortedUsers;
+        switch (category) {
+            case 'wins':
+                sortedUsers = registeredUsers.sort((a, b) =>
+                    (b.stats.wins || 0) - (a.stats.wins || 0)
+                );
+                break;
+            case 'dishes':
+                sortedUsers = registeredUsers.sort((a, b) =>
+                    (b.stats.dishesServed || 0) - (a.stats.dishesServed || 0)
+                );
+                break;
+            case 'score':
+            default:
+                sortedUsers = registeredUsers.sort((a, b) =>
+                    (b.stats.scoreTotal || 0) - (a.stats.scoreTotal || 0)
+                );
+                break;
+        }
+
+        // Return top N users
+        const leaderboard = sortedUsers.slice(0, limit).map((user, index) => ({
+            rank: index + 1,
+            uid: user.uid,
+            username: user.username,
+            profileImage: user.profileImage,
+            level: user.level,
+            totalScore: user.stats.scoreTotal || 0,
+            wins: user.stats.wins || 0,
+            dishesServed: user.stats.dishesServed || 0,
+            gamesPlayed: user.stats.gamesPlayed || 0
+        }));
+
+        res.json(leaderboard);
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        res.status(500).json({ error: 'Failed to fetch leaderboard' });
+    }
+});
+
 // ============ FIREBASE SETUP ============
 let db = null;
 const FIREBASE_KEY_PATH = path.join(__dirname, 'serviceAccountKey.json');
@@ -113,35 +172,94 @@ function checkAchievements(user, player, room) {
         newAchievements.push({ id: 'first_dish', name: 'First Dish!', description: 'Serve your first dish', unlockedAt: Date.now() });
     }
 
-    // Score Achievements
+    // Kitchen Novice - Win your first game
+    if (stats.wins >= 1 && !stats.achievements.some(a => a.id === 'kitchen_novice')) {
+        newAchievements.push({ id: 'kitchen_novice', name: 'Kitchen Novice', description: 'Win your first game', unlockedAt: Date.now() });
+    }
+
+    // Co-op Achievements (5 levels)
+    if (stats.coopGames >= 1 && !stats.achievements.some(a => a.id === 'coop_first')) {
+        newAchievements.push({ id: 'coop_first', name: 'Teamwork!', description: 'Play your first co-op game', unlockedAt: Date.now() });
+    }
+    if (stats.coopGames >= 5 && !stats.achievements.some(a => a.id === 'coop_5')) {
+        newAchievements.push({ id: 'coop_5', name: 'Good Partner', description: 'Play 5 co-op games', unlockedAt: Date.now() });
+    }
+    if (stats.coopGames >= 10 && !stats.achievements.some(a => a.id === 'coop_10')) {
+        newAchievements.push({ id: 'coop_10', name: 'Team Player', description: 'Play 10 co-op games', unlockedAt: Date.now() });
+    }
+    if (stats.coopGames >= 25 && !stats.achievements.some(a => a.id === 'coop_25')) {
+        newAchievements.push({ id: 'coop_25', name: 'Best Friends', description: 'Play 25 co-op games', unlockedAt: Date.now() });
+    }
+    if (stats.coopGames >= 50 && !stats.achievements.some(a => a.id === 'coop_50')) {
+        newAchievements.push({ id: 'coop_50', name: 'Dynamic Duo', description: 'Play 50 co-op games', unlockedAt: Date.now() });
+    }
+
+    // Score Achievements (5 levels)
     if (player.score >= 100 && !stats.achievements.some(a => a.id === 'score_100')) {
         newAchievements.push({ id: 'score_100', name: 'Century Chef', description: 'Score 100 points in a game', unlockedAt: Date.now() });
     }
     if (player.score >= 200 && !stats.achievements.some(a => a.id === 'score_200')) {
         newAchievements.push({ id: 'score_200', name: 'Double Century', description: 'Score 200 points in a game', unlockedAt: Date.now() });
     }
+    if (player.score >= 300 && !stats.achievements.some(a => a.id === 'score_300')) {
+        newAchievements.push({ id: 'score_300', name: 'Triple Century', description: 'Score 300 points in a game', unlockedAt: Date.now() });
+    }
+    if (player.score >= 400 && !stats.achievements.some(a => a.id === 'score_400')) {
+        newAchievements.push({ id: 'score_400', name: 'Quad Century', description: 'Score 400 points in a game', unlockedAt: Date.now() });
+    }
+    if (player.score >= 500 && !stats.achievements.some(a => a.id === 'score_500')) {
+        newAchievements.push({ id: 'score_500', name: 'Legendary Chef', description: 'Score 500 points in a game', unlockedAt: Date.now() });
+    }
 
-    // Dishes Served Achievements
+    // Dishes Served Achievements (5 levels)
     if (player.dishesServed >= 5 && !stats.achievements.some(a => a.id === 'dishes_5')) {
         newAchievements.push({ id: 'dishes_5', name: 'Busy Chef', description: 'Serve 5 dishes in a game', unlockedAt: Date.now() });
     }
     if (player.dishesServed >= 10 && !stats.achievements.some(a => a.id === 'dishes_10')) {
         newAchievements.push({ id: 'dishes_10', name: 'Master Chef', description: 'Serve 10 dishes in a game', unlockedAt: Date.now() });
     }
+    if (player.dishesServed >= 15 && !stats.achievements.some(a => a.id === 'dishes_15')) {
+        newAchievements.push({ id: 'dishes_15', name: 'Expert Chef', description: 'Serve 15 dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.dishesServed >= 20 && !stats.achievements.some(a => a.id === 'dishes_20')) {
+        newAchievements.push({ id: 'dishes_20', name: 'Elite Chef', description: 'Serve 20 dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.dishesServed >= 25 && !stats.achievements.some(a => a.id === 'dishes_25')) {
+        newAchievements.push({ id: 'dishes_25', name: 'Godlike Chef', description: 'Serve 25 dishes in a game', unlockedAt: Date.now() });
+    }
 
-    // Perfect Dishes
+    // Perfect Dishes (5 levels)
     if (player.perfectDishes >= 3 && !stats.achievements.some(a => a.id === 'perfect_3')) {
         newAchievements.push({ id: 'perfect_3', name: 'Perfectionist', description: 'Serve 3 perfect dishes in a game', unlockedAt: Date.now() });
     }
-
-    // Combo
-    if (room.maxCombo >= 5 && !stats.achievements.some(a => a.id === 'combo_5')) {
-        newAchievements.push({ id: 'combo_5', name: 'Combo Master', description: 'Achieve a 5x combo', unlockedAt: Date.now() });
+    if (player.perfectDishes >= 5 && !stats.achievements.some(a => a.id === 'perfect_5')) {
+        newAchievements.push({ id: 'perfect_5', name: 'Flawless Cook', description: 'Serve 5 perfect dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.perfectDishes >= 8 && !stats.achievements.some(a => a.id === 'perfect_8')) {
+        newAchievements.push({ id: 'perfect_8', name: 'Perfect Master', description: 'Serve 8 perfect dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.perfectDishes >= 12 && !stats.achievements.some(a => a.id === 'perfect_12')) {
+        newAchievements.push({ id: 'perfect_12', name: 'Precision Expert', description: 'Serve 12 perfect dishes in a game', unlockedAt: Date.now() });
+    }
+    if (player.perfectDishes >= 15 && !stats.achievements.some(a => a.id === 'perfect_15')) {
+        newAchievements.push({ id: 'perfect_15', name: 'Perfection Incarnate', description: 'Serve 15 perfect dishes in a game', unlockedAt: Date.now() });
     }
 
-    // Games Played - check after incrementing
+    // Games Played (5 levels) - check after incrementing
     if (stats.gamesPlayed >= 10 && !stats.achievements.some(a => a.id === 'games_10')) {
         newAchievements.push({ id: 'games_10', name: 'Veteran Chef', description: 'Play 10 games', unlockedAt: Date.now() });
+    }
+    if (stats.gamesPlayed >= 25 && !stats.achievements.some(a => a.id === 'games_25')) {
+        newAchievements.push({ id: 'games_25', name: 'Seasoned Pro', description: 'Play 25 games', unlockedAt: Date.now() });
+    }
+    if (stats.gamesPlayed >= 50 && !stats.achievements.some(a => a.id === 'games_50')) {
+        newAchievements.push({ id: 'games_50', name: 'Kitchen Legend', description: 'Play 50 games', unlockedAt: Date.now() });
+    }
+    if (stats.gamesPlayed >= 100 && !stats.achievements.some(a => a.id === 'games_100')) {
+        newAchievements.push({ id: 'games_100', name: 'Culinary Master', description: 'Play 100 games', unlockedAt: Date.now() });
+    }
+    if (stats.gamesPlayed >= 200 && !stats.achievements.some(a => a.id === 'games_200')) {
+        newAchievements.push({ id: 'games_200', name: 'Eternal Chef', description: 'Play 200 games', unlockedAt: Date.now() });
     }
 
     return newAchievements;
@@ -150,6 +268,17 @@ function checkAchievements(user, player, room) {
 // ============ USER MANAGEMENT ============
 const USERS_FILE = path.join(__dirname, 'users.json');
 let users = {};
+
+function generateUID() {
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+        result += Math.floor(Math.random() * 10);
+    }
+    // Ensure uniqueness
+    const exists = Object.values(users).some(u => u.uid === result);
+    if (exists) return generateUID();
+    return result;
+}
 
 async function loadUsers() {
     // 1. Load from local file first (for fallback/speed)
@@ -189,6 +318,93 @@ async function loadUsers() {
             console.error('Error syncing/migrating from Firestore:', e);
         }
     }
+
+    // 4. Ensure all accounts have a numeric UID, Level, and XP
+    let updated = false;
+    for (const id of Object.keys(users)) {
+        if (users[id].type === 'account') {
+            let userUpdated = false;
+            if (!users[id].uid) {
+                users[id].uid = generateUID();
+                userUpdated = true;
+                console.log(`🆔 Assigned UID ${users[id].uid} to user ${users[id].username || id}`);
+            }
+            if (users[id].level === undefined) {
+                users[id].level = 1;
+                userUpdated = true;
+            }
+            if (users[id].xp === undefined) {
+                users[id].xp = 0;
+                userUpdated = true;
+            }
+            if (!users[id].stats) {
+                users[id].stats = {};
+                userUpdated = true;
+            }
+            // Add missing stat fields
+            if (users[id].stats.wins === undefined) {
+                users[id].stats.wins = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.bestStreak === undefined) {
+                users[id].stats.bestStreak = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.perfectDishes === undefined) {
+                users[id].stats.perfectDishes = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.dishesServed === undefined) {
+                users[id].stats.dishesServed = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.gamesPlayed === undefined) {
+                users[id].stats.gamesPlayed = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.coopGames === undefined) {
+                users[id].stats.coopGames = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.itemsChopped === undefined) {
+                users[id].stats.itemsChopped = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.itemsCooked === undefined) {
+                users[id].stats.itemsCooked = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.burntFood === undefined) {
+                users[id].stats.burntFood = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.failedOrders === undefined) {
+                users[id].stats.failedOrders = 0;
+                userUpdated = true;
+            }
+            if (users[id].stats.scoreTotal === undefined) {
+                users[id].stats.scoreTotal = 0;
+                userUpdated = true;
+            }
+            if (!users[id].stats.achievements) {
+                users[id].stats.achievements = [];
+                userUpdated = true;
+            }
+            if (!users[id].stats.gameScores) {
+                users[id].stats.gameScores = [];
+                userUpdated = true;
+            }
+
+            if (userUpdated) {
+                await persistUser(id);
+                updated = true;
+            }
+        }
+    }
+
+    if (updated) {
+        console.log(`✅ All user UIDs, Levels, and XP have been synced.`);
+    }
 }
 
 async function saveUserToCloud(userId, userData) {
@@ -202,13 +418,7 @@ async function saveUserToCloud(userId, userData) {
 
 function saveUsersLocally() {
     try {
-        const accountsOnly = {};
-        Object.entries(users).forEach(([id, user]) => {
-            if (user.type === 'account') {
-                accountsOnly[id] = user;
-            }
-        });
-        fs.writeFileSync(USERS_FILE, JSON.stringify(accountsOnly, null, 2));
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
     } catch (e) {
         console.error('Error saving local users:', e);
     }
@@ -234,18 +444,22 @@ const ORDER_TIMEOUT = 60000; // Longer expiration (Easier)
 const MAX_ORDERS = 6;
 const TICK_RATE = 100; // 10 ticks/sec
 
+// Player visual defaults
+const PLAYER_COLORS = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
+const PLAYER_EMOJIS = ['👨‍🍳', '👩‍🍳', '🧑‍🍳', '👨‍🍳'];
+
 // ============ RECIPE DEFINITIONS ============
 const INGREDIENTS = {
-    tomato: { name: 'Tomato', color: '#e74c3c', emoji: '🍅', chopTime: 2500 },
-    lettuce: { name: 'Lettuce', color: '#2ecc71', emoji: '🥬', chopTime: 2500 },
-    meat: { name: 'Meat', color: '#a0522d', emoji: '🥩', chopTime: 4500 },
-    cheese: { name: 'Cheese', color: '#f1c40f', emoji: '🧀', chopTime: 1500 },
+    tomato: { name: 'Tomato', color: '#e74c3c', emoji: '🍅', chopTime: 1000 },
+    lettuce: { name: 'Lettuce', color: '#2ecc71', emoji: '🥬', chopTime: 1000 },
+    meat: { name: 'Meat', color: '#a0522d', emoji: '🥩', chopTime: 1000 },
+    cheese: { name: 'Cheese', color: '#f1c40f', emoji: '🧀', chopTime: 1000 },
     bread: { name: 'Bread', color: '#d4a574', emoji: '🍞', chopTime: 0 },
-    dough: { name: 'Dough', color: '#f5f6fa', emoji: '⚪', chopTime: 0, rollTime: 3000 },
-    fish: { name: 'Fish', color: '#3498db', emoji: '🐟', chopTime: 2500 },
-    rice: { name: 'Rice', color: '#ecf0f1', emoji: '🍚', chopTime: 0, requiresWashing: true, washTime: 2000 },
-    onion: { name: 'Onion', color: '#0cef8dc1', emoji: '🧅', chopTime: 2500 },
-    mushroom: { name: 'Mushroom', color: '#8B7355', emoji: '🍄', chopTime: 2500 },
+    dough: { name: 'Dough', color: '#f5f6fa', emoji: '⚪', chopTime: 0, rollTime: 1000 },
+    fish: { name: 'Fish', color: '#3498db', emoji: '🐟', chopTime: 1000 },
+    rice: { name: 'Rice', color: '#ecf0f1', emoji: '🍚', chopTime: 0, requiresWashing: true, washTime: 1000 },
+    onion: { name: 'Onion', color: '#0cef8dc1', emoji: '🧅', chopTime: 1000 },
+    mushroom: { name: 'Mushroom', color: '#8B7355', emoji: '🍄', chopTime: 1000 },
     egg: { name: 'Egg', color: '#FFEFD5', emoji: '🥚', chopTime: 0 },
 };
 
@@ -256,7 +470,7 @@ const RECIPES = {
         ingredients: ['bread', 'meat', 'lettuce', 'tomato'],
         requiresChopping: ['meat', 'lettuce', 'tomato'],
         requiresCooking: ['meat'],
-        cookTime: 5000,
+        cookTime: 3000,
         points: 30,
         tip: 10,
         color: '#D4A574'
@@ -279,7 +493,7 @@ const RECIPES = {
         requiresChopping: ['fish'],
         requiresWashing: ['rice'],
         requiresCooking: ['rice'],
-        cookTime: 4000,
+        cookTime: 3000,
         points: 35,
         tip: 15,
         color: '#e74c3c'
@@ -291,7 +505,7 @@ const RECIPES = {
         requiresChopping: ['tomato', 'cheese'],
         requiresRolling: ['dough'], // Use ROLLER first
         requiresCooking: ['dough'], // Then OVEN
-        cookTime: 8000,
+        cookTime: 3000,
         points: 50,
         tip: 20,
         color: '#e67e22'
@@ -302,7 +516,7 @@ const RECIPES = {
         ingredients: ['tomato', 'onion', 'mushroom'],
         requiresChopping: ['tomato', 'onion', 'mushroom'],
         requiresCooking: ['tomato', 'onion', 'mushroom'],
-        cookTime: 7000,
+        cookTime: 3000,
         points: 35,
         tip: 10,
         color: '#c0392b'
@@ -313,7 +527,7 @@ const RECIPES = {
         ingredients: ['egg', 'cheese', 'mushroom'],
         requiresChopping: ['mushroom'],
         requiresCooking: ['egg'],
-        cookTime: 4000,
+        cookTime: 3000,
         points: 25,
         tip: 8,
         color: '#f39c12'
@@ -324,7 +538,7 @@ const RECIPES = {
         ingredients: ['meat', 'mushroom', 'onion'],
         requiresChopping: ['meat', 'mushroom', 'onion'],
         requiresCooking: ['meat', 'mushroom', 'onion'],
-        cookTime: 6000,
+        cookTime: 3000,
         points: 45,
         tip: 15,
         color: '#8B4513'
@@ -335,7 +549,7 @@ const RECIPES = {
         ingredients: ['fish', 'lettuce', 'tomato', 'bread'],
         requiresChopping: ['fish', 'lettuce', 'tomato'],
         requiresCooking: ['fish'],
-        cookTime: 5000,
+        cookTime: 3000,
         points: 40,
         tip: 12,
         color: '#FFD700'
@@ -858,6 +1072,7 @@ function createRoom(roomId, settings) {
         difficulty: diff,
         activeRecipes: content.recipes,
         activeIngredients: content.ingredients,
+        droppedItems: {},
         config: {
             TILE_SIZE,
             GRID_W: w,
@@ -1032,15 +1247,25 @@ io.on('connection', (socket) => {
             const hashedPassword = await bcrypt.hash(password, 10);
             users[userId] = {
                 id: userId,
+                uid: generateUID(),
                 username: username,
                 name: username, // Default display name
                 type: 'account',
                 password: hashedPassword,
                 createdAt: Date.now(),
+                level: 1,
+                xp: 0,
                 stats: {
                     gamesPlayed: 0,
                     scoreTotal: 0,
                     dishesServed: 0,
+                    perfectDishes: 0,
+                    wins: 0,
+                    bestStreak: 0,
+                    itemsChopped: 0,
+                    itemsCooked: 0,
+                    burntFood: 0,
+                    failedOrders: 0,
                     chefHatPoints: 0,
                     gameScores: [],
                     achievements: []
@@ -1145,6 +1370,11 @@ io.on('connection', (socket) => {
                     gamesPlayed: 0,
                     scoreTotal: 0,
                     dishesServed: 0,
+                    perfectDishes: 0,
+                    itemsChopped: 0,
+                    itemsCooked: 0,
+                    burntFood: 0,
+                    failedOrders: 0,
                     chefHatPoints: 0,
                     gameScores: [],
                     achievements: []
@@ -1341,6 +1571,7 @@ io.on('connection', (socket) => {
                 state: room.state,
                 mode: room.mode,
                 difficulty: room.difficulty,
+                droppedItems: room.droppedItems || {},
                 activeRecipes: room.activeRecipes,
                 activeIngredients: room.activeIngredients
             },
@@ -1424,11 +1655,9 @@ io.on('connection', (socket) => {
         socket.join(roomId);
 
         // Calculate player index (0, 1, 2)
-        const playerColors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
-        const playerEmojis = ['👨‍🍳', '👩‍🍳', '🧑‍🍳', '👨‍🍳'];
         // Use next available index or simple count
         const existingIds = Object.keys(room.players);
-        const colorIdx = existingIds.length % playerColors.length;
+        const colorIdx = existingIds.length % PLAYER_COLORS.length;
 
         // Spawns - dynamic based on map layout or custom spawns
         const gw = room.config.GRID_W;
@@ -1472,8 +1701,8 @@ io.on('connection', (socket) => {
             targetZ: spawn.z * TILE_SIZE,
             facing: 'down', // up, down, left, right
             holding: null,  // { type: 'ingredient'|'plate', data: {...} }
-            color: playerColors[colorIdx],
-            emoji: playerEmojis[colorIdx],
+            color: PLAYER_COLORS[colorIdx],
+            emoji: PLAYER_EMOJIS[colorIdx],
             profileImage: users[userId] ? users[userId].profileImage : 'chef_1',
             profileColor: users[userId] ? users[userId].profileColor : '#FF6B6B',
             title: users[userId] ? users[userId].title : '',
@@ -1482,6 +1711,10 @@ io.on('connection', (socket) => {
             chopStationId: null,
             score: 0,
             dishesServed: 0,
+            perfectDishes: 0,
+            itemsChopped: 0,
+            itemsCooked: 0,
+            burntFood: 0,
             isHost: isHost,
             isReady: false, // Ready status for non-host players
         };
@@ -1504,6 +1737,7 @@ io.on('connection', (socket) => {
                 state: room.state,
                 mode: room.mode,
                 difficulty: room.difficulty,
+                droppedItems: room.droppedItems || {}
             },
             config: {
                 TILE_SIZE: room.config.TILE_SIZE,
@@ -1593,6 +1827,63 @@ io.on('connection', (socket) => {
         handleInteraction(player, station, room);
     });
 
+    // Throw held item onto the floor (physics)
+    socket.on('throwItem', (data) => {
+        const player = findPlayer(socket.id);
+        if (!player || !player.holding) return;
+        const room = rooms[player.roomId];
+        if (!room || room.state !== 'playing') return;
+
+        // Calculate vx, vz based on facing direction
+        let vx = 0; let vz = 0;
+        // REDUCED THROW POWER
+        const speed = 0.25 * (data.power || 1.0); // reduced from 0.5
+        if (player.facing === 'up') vz = -speed;
+        if (player.facing === 'down') vz = speed;
+        if (player.facing === 'left') vx = -speed;
+        if (player.facing === 'right') vx = speed;
+
+        const itemId = 'item_' + Date.now() + Math.random().toString(36).substr(2, 5);
+
+        let startX = player.posX !== undefined ? player.posX : player.gridX * TILE_SIZE;
+        let startZ = player.posZ !== undefined ? player.posZ : player.gridZ * TILE_SIZE;
+
+        if (!room.droppedItems) room.droppedItems = {};
+
+        room.droppedItems[itemId] = {
+            id: itemId,
+            data: player.holding,
+            x: startX,
+            z: startZ,
+            y: 1.5, // Start slightly up from chef's hands
+            vx: vx * 1.5,
+            vz: vz * 1.5,
+            vy: 0.5 * (data.power || 1.0), // reduced from 0.8
+
+        };
+        player.holding = null;
+        io.to(room.id).emit('itemThrown', { itemId, item: room.droppedItems[itemId] });
+        emitPlayerUpdate(player, room);
+        console.log(`💨 ${player.name} threw an item! ID: ${itemId}`);
+    });
+
+    // Pick up a dropped item from the floor
+    socket.on('pickupItem', (data) => {
+        const player = findPlayer(socket.id);
+        if (!player || player.holding) return;
+        const room = rooms[player.roomId];
+        if (!room || room.state !== 'playing') return;
+
+        const itemId = data.itemId;
+        if (room.droppedItems && room.droppedItems[itemId]) {
+            player.holding = room.droppedItems[itemId].data;
+            delete room.droppedItems[itemId];
+            io.to(room.id).emit('itemPickedUp', { itemId, playerId: socket.id });
+            emitPlayerUpdate(player, room);
+            console.log(`🖐️ ${player.name} picked up item! ID: ${itemId}`);
+        }
+    });
+
     // Chop action (hold spacebar)
     socket.on('chopAction', (data) => {
         const player = findPlayer(socket.id);
@@ -1650,10 +1941,15 @@ io.on('connection', (socket) => {
             if (station.contents) {
                 station.contents.chopProgress = 100;
             }
+
+            // Increment player chop stat
+            player.itemsChopped = (player.itemsChopped || 0) + 1;
+
             io.to(room.id).emit('chopComplete', {
                 stationId: station.id,
                 ingredient: station.contents.name,
                 playerId: socket.id,
+                totalChopped: player.itemsChopped,
             });
         }
 
@@ -2294,9 +2590,8 @@ io.on('connection', (socket) => {
         socket.join(roomId);
 
         // Calculate player index
-        const playerColors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
         const existingIds = Object.keys(room.players);
-        const colorIdx = existingIds.length % playerColors.length;
+        const colorIdx = existingIds.length % PLAYER_COLORS.length;
         const isHost = existingIds.length === 0;
 
         // Spawn position
@@ -2329,8 +2624,8 @@ io.on('connection', (socket) => {
             targetZ: spawn.z * TILE_SIZE,
             facing: 'down',
             holding: null,
-            color: playerColors[colorIdx],
-            emoji: playerEmojis[colorIdx],
+            color: PLAYER_COLORS[colorIdx],
+            emoji: PLAYER_EMOJIS[colorIdx],
             profileImage: users[userId] ? users[userId].profileImage : 'chef_1',
             profileColor: users[userId] ? users[userId].profileColor : '#FF6B6B',
             title: users[userId] ? users[userId].title : '',
@@ -2361,6 +2656,7 @@ io.on('connection', (socket) => {
                 state: room.state,
                 mode: room.mode,
                 difficulty: room.difficulty,
+                droppedItems: room.droppedItems || {},
             },
             config: {
                 TILE_SIZE: room.config.TILE_SIZE,
@@ -2464,15 +2760,21 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const friendName = data.name.trim();
+        const input = data.name.trim();
 
-        // Find the friend user by username
-        const friendUserId = Object.keys(users).find(uid =>
-            users[uid].username && users[uid].username.toLowerCase() === friendName.toLowerCase()
-        );
+        // Find the friend user by UID (numeric) or username
+        const friendUserId = Object.keys(users).find(uid => {
+            const u = users[uid];
+            if (u.type !== 'account') return false;
+            // Check numeric UID
+            if (u.uid === input) return true;
+            // Check username (case-insensitive)
+            if (u.username && u.username.toLowerCase() === input.toLowerCase()) return true;
+            return false;
+        });
 
         if (!friendUserId) {
-            socket.emit('friendError', { message: `User "${friendName}" not found!` });
+            socket.emit('friendError', { message: `User "${input}" not found!` });
             return;
         }
 
@@ -2787,7 +3089,7 @@ function handleCounter(player, station, room) {
                 } else if (player.holding.name === 'rice' && !player.holding.washed) {
                     io.to(room.id).emit('notification', { msg: '🍚 Wash the rice first!', type: 'error' });
                 } else if (ing && ing.chopTime > 0 && !player.holding.chopped) {
-                    io.to(room.id).emit('notification', { msg: `✂️ Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
+                    io.to(room.id).emit('notification', { msg: `🔪 Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                 } else if ((player.holding.name === 'meat' || player.holding.name === 'fish') && !player.holding.cooked) {
                     // Check if this is for a dish that requires pre-cooking
                     const plateIngredients = station.contents.ingredients || [];
@@ -2851,7 +3153,7 @@ function handleChopping(player, station, room) {
                     io.to(room.id).emit('notification', { msg: 'Cannot add to plate!', type: 'error' });
                 }
             } else {
-                io.to(room.id).emit('notification', { msg: '✂️ Finish chopping first!', type: 'error' });
+                io.to(room.id).emit('notification', { msg: '🔪 Finish chopping first!', type: 'error' });
             }
         } else if (!player.holding) {
             // VALIDATION: Only allow picking up if fully chopped OR doesn't need chopping
@@ -2862,7 +3164,7 @@ function handleChopping(player, station, room) {
                 station.chopProgress = 0;
             } else {
                 // VALIDATION: Cannot pick up until fully chopped
-                io.to(room.id).emit('notification', { msg: '✂️ Finish chopping first!', type: 'error' });
+                io.to(room.id).emit('notification', { msg: '🔪 Finish chopping first!', type: 'error' });
             }
         }
     }
@@ -2905,7 +3207,7 @@ function handleStove(player, station, room) {
             }
 
             if (ing && ing.chopTime > 0 && !player.holding.chopped) {
-                io.to(room.id).emit('notification', { msg: `✂️ Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
+                io.to(room.id).emit('notification', { msg: `🔪 Chop the ${ing.emoji} ${ing.name} first!`, type: 'error' });
                 emitPlayerUpdate(player, room);
                 return;
             }
@@ -2914,6 +3216,7 @@ function handleStove(player, station, room) {
             station.cookProgress = 0;
             station.isBurning = false;
             station.cookedNotified = false;
+            station.lastChefId = player.id; // Track who placed it
             player.holding = null;
         } else if (player.holding.type === 'plate') {
             const plateIngredients = player.holding.ingredients || [];
@@ -2926,6 +3229,7 @@ function handleStove(player, station, room) {
             station.cookProgress = 0;
             station.isBurning = false;
             station.cookedNotified = false;
+            station.lastChefId = player.id; // Track who placed it
             player.holding = null;
         }
     } else if (!player.holding && station.contents) {
@@ -2943,6 +3247,7 @@ function handleStove(player, station, room) {
         const combined = tryCombine(player.holding, station.contents, room);
         if (combined) {
             station.contents = combined;
+            station.lastChefId = player.id; // Track who added ingredient
             player.holding = null;
         }
     }
@@ -2995,6 +3300,7 @@ function handleOven(player, station, room) {
             station.cookProgress = 0;
             station.isBurning = false;
             station.cookedNotified = false;
+            station.lastChefId = player.id; // Track who placed it
             player.holding = null;
         } else {
             io.to(room.id).emit('notification', { msg: '🍕 Only Pizza/Dough in the Oven!', type: 'error' });
@@ -3161,6 +3467,7 @@ function handleServe(player, station, room) {
 function handleTrash(player, station, room) {
     if (player.holding) {
         player.holding = null;
+        io.to(room.id).emit('trashEffect', { stationId: station.id });
         io.to(room.id).emit('notification', {
             msg: '🗑️ Item trashed',
             type: 'info',
@@ -3342,6 +3649,7 @@ function finalizeGameStart(room) {
     room.ordersCompleted = 0;
     room.ordersFailed = 0;
     room.perfectDishes = 0;
+    room.droppedItems = {};
 
     // Clear any old disconnected players from previous game sessions in this room
     Object.keys(disconnectedPlayers).forEach(userId => {
@@ -3449,6 +3757,115 @@ function tickGame(room) {
         }
     });
 
+    // --- DROPPED ITEMS PHYSICS ---
+    if (room.droppedItems) {
+        Object.values(room.droppedItems).forEach(item => {
+            let inMotion = item.y > 0 || Math.abs(item.vx) > 0.01 || Math.abs(item.vz) > 0.01;
+
+            // Pushable by players (overlap check)
+            Object.values(room.players).forEach(p => {
+                const px = p.posX !== undefined ? p.posX : p.gridX * TILE_SIZE;
+                const pz = p.posZ !== undefined ? p.posZ : p.gridZ * TILE_SIZE;
+                const dist = Math.sqrt(Math.pow(item.x - px, 2) + Math.pow(item.z - pz, 2));
+                if (dist < TILE_SIZE * 0.9) {
+                    item.vx += (item.x - px) * 0.04;
+                    item.vz += (item.z - pz) * 0.04;
+                    inMotion = true;
+                }
+            });
+
+            if (inMotion) {
+                // Apply gravity
+                item.vy -= 0.1;
+                item.y += item.vy;
+
+                // Track old position in case of collision
+                const oldX = item.x;
+                const oldZ = item.z;
+
+                item.x += item.vx;
+                item.z += item.vz;
+
+                // Station collision (simple bounding box check)
+                // Treat item as a small sphere and station as a tile box
+                const itemGridX = Math.round(item.x / TILE_SIZE);
+                const itemGridZ = Math.round(item.z / TILE_SIZE);
+
+                let hitStation = false;
+                let landedOnTable = false;
+
+                for (const [id, st] of Object.entries(room.stations)) {
+                    if (st.gridX === itemGridX && st.gridZ === itemGridZ) {
+                        const oldGridX = Math.round(oldX / TILE_SIZE);
+                        const oldGridZ = Math.round(oldZ / TILE_SIZE);
+
+                        // If item is below table height AND crossed grid lines into a table
+                        if (item.y < 1.2 && (oldGridX !== itemGridX || oldGridZ !== itemGridZ)) {
+                            // Hit the side of the table
+                            item.x = oldX;
+                            item.z = oldZ;
+                            item.vx *= -0.4; // Reverse direction and dampen heavily
+                            item.vz *= -0.4;
+                            hitStation = true;
+                        }
+                        // If item is falling from above down ONTO the table
+                        else if (item.y <= 1.2 && item.vy < 0) {
+                            landedOnTable = true;
+                        }
+                        break;
+                    }
+                }
+
+                // Floor collision or Table Collision
+                const groundLevel = landedOnTable ? 1.2 : 0;
+
+                if (item.y <= groundLevel) {
+                    // Check if we landed on a trash bin
+                    if (landedOnTable) {
+                        for (const [id, st] of Object.entries(room.stations)) {
+                            if (st.gridX === itemGridX && st.gridZ === itemGridZ && st.type === 'trash') {
+                                // Submitting to trash!
+                                delete room.droppedItems[item.id];
+                                io.to(room.id).emit('itemPickedUp', { itemId: item.id, trashed: true });
+                                io.to(room.id).emit('trashEffect', { stationId: st.id });
+                                return;
+                            }
+                        }
+                    }
+
+                    item.y = groundLevel;
+                    item.vy = -item.vy * 0.2; // Severely reduced bounce
+
+                    if (hitStation || landedOnTable) {
+                        // Add extra friction if it hit a counter to prevent sliding on it
+                        item.vx *= 0.3;
+                        item.vz *= 0.3;
+                    } else {
+                        // Normal floor friction
+                        item.vx *= 0.6;
+                        item.vz *= 0.6;
+                    }
+
+                    if (Math.abs(item.vy) < 0.1) item.vy = 0;
+                    if (Math.abs(item.vx) < 0.01) item.vx = 0;
+                    if (Math.abs(item.vz) < 0.01) item.vz = 0;
+                }
+
+                // Map bounds
+                const maxX = room.config.GRID_W * TILE_SIZE;
+                const maxZ = room.config.GRID_H * TILE_SIZE;
+
+                if (item.x < 0) { item.x = 0; item.vx *= -0.4; }
+                if (item.x > maxX) { item.x = maxX; item.vx *= -0.4; }
+                if (item.z < 0) { item.z = 0; item.vz *= -0.4; }
+                if (item.z > maxZ) { item.z = maxZ; item.vz *= -0.4; }
+
+                // Emit updates for items in motion occasionally or every tick
+                io.to(room.id).emit('droppedItemUpdate', { itemId: item.id, x: item.x, y: item.y, z: item.z });
+            }
+        });
+    }
+
     // Update stoves & ovens (cooking progress)
     Object.values(room.stations).forEach(station => {
         if ((station.type === 'stove' || station.type === 'oven') && station.contents) {
@@ -3492,6 +3909,12 @@ function tickGame(room) {
                     contents.cookedPlate = true;
                 }
                 station.cookedNotified = true;
+
+                // Track item cooked for the player who last interacted with this station
+                if (station.lastChefId && room.players[station.lastChefId]) {
+                    room.players[station.lastChefId].itemsCooked = (room.players[station.lastChefId].itemsCooked || 0) + 1;
+                }
+
                 io.to(room.id).emit('cookComplete', { stationId: station.id });
                 console.log(`🍳 Station ${station.id} finished cooking.`);
             }
@@ -3499,6 +3922,13 @@ function tickGame(room) {
             if (station.cookProgress >= 200 && !station.isBurning) {
                 // BURNING! (5 seconds after being done)
                 station.isBurning = true;
+
+                // Track burnt food for the player who last interacted with this station or for the room
+                room.burntFood = (room.burntFood || 0) + 1;
+                if (station.lastChefId && room.players[station.lastChefId]) {
+                    room.players[station.lastChefId].burntFood = (room.players[station.lastChefId].burntFood || 0) + 1;
+                }
+
                 io.to(room.id).emit('burning', {
                     stationId: station.id,
                 });
@@ -3550,67 +3980,221 @@ function tickGame(room) {
 }
 
 function endGame(room) {
+    console.log(`🏁 Game Over in room ${room.id}. Score: ${room.score}`);
     room.state = 'gameover';
     room.gameSessionId = null; // Clear game session ID when game ends
     clearTimers(room);
 
-    if (room.score > room.highScore) {
+    if (room.score > (room.highScore || 0)) {
         room.highScore = room.score;
     }
 
     const chefPoints = Math.floor(room.score / 10);
 
-    // Update user stats for all players who are registered users
-    Object.values(room.players).forEach(player => {
-        if (player.userId && users[player.userId] && users[player.userId].type === 'account') {
-            const user = users[player.userId];
-            const stats = user.stats;
+    // Update user stats for all players who are registered users or guests
+    try {
+        Object.values(room.players).forEach(player => {
+            if (player.userId && users[player.userId]) {
+                const user = users[player.userId];
+                const stats = user.stats;
 
-            // Check for new achievements BEFORE updating stats
-            const newAchievements = checkAchievements(user, player, room);
-            if (newAchievements.length > 0) {
-                stats.achievements.push(...newAchievements);
-                console.log(`🏆 New achievements for ${user.username}: ${newAchievements.map(a => a.name).join(', ')}`);
+                // Check for new achievements BEFORE updating stats
+                const newAchievements = checkAchievements(user, player, room);
+                if (newAchievements && newAchievements.length > 0) {
+                    if (!stats.achievements) stats.achievements = [];
+                    stats.achievements.push(...newAchievements);
+                    console.log(`🏆 New achievements for ${user.username}: ${newAchievements.map(a => a.name).join(', ')}`);
+                }
+
+                // Increment games played
+                stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
+
+                // Track co-op games
+                if (room.mode === 'multi_coop') {
+                    stats.coopGames = (stats.coopGames || 0) + 1;
+                }
+
+                // Update running totals
+                stats.perfectDishes = (stats.perfectDishes || 0) + (player.perfectDishes || 0);
+                stats.itemsChopped = (stats.itemsChopped || 0) + (player.itemsChopped || 0);
+                stats.itemsCooked = (stats.itemsCooked || 0) + (player.itemsCooked || 0);
+                stats.burntFood = (stats.burntFood || 0) + (player.burntFood || 0);
+                stats.failedOrders = (stats.failedOrders || 0) + (room.ordersFailed || 0);
+
+                if (room.maxCombo > (stats.bestStreak || 0)) {
+                    stats.bestStreak = room.maxCombo;
+                }
+
+                // --- WIN CALCULATION ---
+                let xpGain = 10;
+                let won = false;
+                let isTie = false;
+
+                if (room.mode === 'multi_vs') {
+                    // Find highest score in room
+                    const allPlayers = Object.values(room.players);
+                    const scores = allPlayers.map(p => p.score || 0);
+                    const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+                    const maxScorers = scores.filter(s => s === maxScore);
+                    const isTied = allPlayers.length > 1 && maxScorers.length > 1;
+
+                    // If player has max score
+                    if (player.score === maxScore && player.score > 0) {
+                        stats.wins = (stats.wins || 0) + 1;
+                        if (isTied) {
+                            isTie = true;
+                            xpGain = 10; // Tie
+                        } else {
+                            won = true;
+                            xpGain = 20; // Win
+                        }
+                    } else if (player.score === maxScore && player.score === 0 && isTied) {
+                        isTie = true; // Tied at 0 points is essentially a loss/draw
+                        xpGain = 5;
+                    } else {
+                        xpGain = 5; // Loss
+                    }
+                } else if (room.mode === 'single' || room.mode === 'multi_coop') {
+                    // In Coop/Single, a "Win" is reaching some goal (e.g. 100 points)
+                    if (player.score >= 100) {
+                        stats.wins = (stats.wins || 0) + 1;
+                        won = true;
+                    }
+                }
+
+                // Store on player object to send to client
+                player.xpGain = xpGain;
+                player.won = won;
+                player.isTie = isTie;
+
+                // --- PROGRESS SYSTEM: +XP PER GAME ---
+                user.xp = (user.xp || 0) + xpGain;
+
+                // LEVEL UP LOGIC: level 1->2 needs 50, 2->3 needs 100, etc. (level * 50)
+                if (!user.level || user.level < 1) user.level = 1;
+                let xpToNext = user.level * 50;
+                while (user.xp >= xpToNext) {
+                    user.xp -= xpToNext;
+                    user.level++;
+                    xpToNext = user.level * 50;
+                    console.log(`🆙 ${user.username} LEVELED UP to Level ${user.level}!`);
+
+                    // Could emit a level-up notification here if player is connected
+                    const playerSocketId = Object.keys(socketToUser).find(sid => socketToUser[sid] === player.userId);
+                    if (playerSocketId) {
+                        io.to(playerSocketId).emit('notification', {
+                            msg: `🎉 LEVEL UP! You are now Level ${user.level}!`,
+                            type: 'success'
+                        });
+                    }
+                }
+
+                // Add score to total
+                stats.scoreTotal = (stats.scoreTotal || 0) + (player.score || 0);
+
+                // Add dishes served to total
+                stats.dishesServed = (stats.dishesServed || 0) + (player.dishesServed || 0);
+
+                // Calculate chef hat points: 3 per dish + bonus based on performance
+                const dishPoints = (player.dishesServed || 0) * 3;
+                const performanceBonus = Math.floor((player.score || 0) / 50); // 1 bonus point per 50 score
+                const newChefPoints = dishPoints + performanceBonus;
+                stats.chefHatPoints = (stats.chefHatPoints || 0) + newChefPoints;
+
+                // Store on player object to send to client
+                player.newChefPoints = newChefPoints;
+
+                // Add game score to history
+                if (!stats.gameScores) stats.gameScores = [];
+
+                let opponentName = null;
+                if (room.mode === 'multi_vs') {
+                    const opponents = Object.values(room.players).filter(p => p.id !== player.id);
+                    opponentName = opponents.map(o => o.name).join(', ') || 'Unknown';
+                }
+
+                stats.gameScores.push({
+                    score: player.score || 0,
+                    dishesServed: player.dishesServed || 0,
+                    perfectDishes: player.perfectDishes || 0,
+                    itemsChopped: player.itemsChopped || 0,
+                    itemsCooked: player.itemsCooked || 0,
+                    burntFood: player.burntFood || 0,
+                    date: Date.now(),
+                    mode: room.mode,
+                    xpEarned: xpGain,
+                    chefHatEarned: newChefPoints,
+                    opponent: opponentName,
+                    won: won,
+                    isTie: isTie
+                });
+
+                // Keep only last 12 games
+                if (stats.gameScores.length > 12) {
+                    stats.gameScores = stats.gameScores.slice(-12);
+                }
+
+                // Persist user data
+                persistUser(player.userId);
+
+                // Send updated profile to client
+                const socketId = userToSocket[player.userId];
+                if (socketId) {
+                    const user = users[player.userId];
+                    const stats = user.stats;
+
+                    // Calculate additional computed stats
+                    const totalAchievements = stats.achievements.length;
+                    const averageScore = stats.gamesPlayed > 0 ? Math.round(stats.scoreTotal / stats.gamesPlayed) : 0;
+                    const averageDishes = stats.gamesPlayed > 0 ? Math.round(stats.dishesServed / stats.gamesPlayed) : 0;
+
+                    // Group achievements by type
+                    const achievementGroups = {
+                        score: stats.achievements.filter(a => a.id.includes('score_')).length,
+                        dishes: stats.achievements.filter(a => a.id.includes('dishes_')).length,
+                        special: stats.achievements.filter(a => !a.id.includes('score_') && !a.id.includes('dishes_') && !a.id.includes('games_')).length,
+                        veteran: stats.achievements.filter(a => a.id.includes('games_')).length
+                    };
+
+                    // Recent games (last 12)
+                    const recentGames = stats.gameScores.slice(-12).reverse();
+
+                    const profile = {
+                        id: user.id,
+                        username: user.username,
+                        name: user.name,
+                        type: user.type,
+                        profileImage: user.profileImage,
+                        profileColor: user.profileColor,
+                        title: user.title,
+                        bio: user.bio,
+                        createdAt: user.createdAt,
+                        stats: {
+                            ...stats,
+                            // Computed fields
+                            averageScore,
+                            averageDishes,
+                            totalAchievements,
+                            achievementGroups,
+                            recentGames
+                        },
+                        friends: user.friends || []
+                    };
+
+                    io.to(socketId).emit('userProfile', profile);
+                }
             }
-
-            // Increment games played
-            stats.gamesPlayed += 1;
-
-            // Add score to total
-            stats.scoreTotal += player.score || 0;
-
-            // Add dishes served to total
-            stats.dishesServed += player.dishesServed || 0;
-
-            // Add game score to history
-            stats.gameScores.push({
-                score: player.score || 0,
-                dishesServed: player.dishesServed || 0,
-                perfectDishes: player.perfectDishes || 0,
-                date: Date.now()
-            });
-
-            // Keep only last 50 games
-            if (stats.gameScores.length > 50) {
-                stats.gameScores = stats.gameScores.slice(-50);
-            }
-
-            // Calculate chef hat points: 3 per dish + bonus based on performance
-            const dishPoints = (player.dishesServed || 0) * 3;
-            const performanceBonus = Math.floor((player.score || 0) / 50); // 1 bonus point per 50 score
-            const newChefPoints = dishPoints + performanceBonus;
-            stats.chefHatPoints += newChefPoints;
-
-            // Persist user data
-            persistUser(player.userId);
-        }
-    });
+        });
+    } catch (err) {
+        console.error('❌ Error updating user stats in endGame:', err);
+    }
 
     io.to(room.id).emit('gameOver', {
         mode: room.mode,
         score: room.score,
         highScore: room.highScore,
         ordersCompleted: room.ordersCompleted,
+        ordersFailed: room.ordersFailed || 0,
         perfectDishes: room.perfectDishes || 0,
         maxCombo: room.maxCombo,
         chefPoints,
@@ -3620,7 +4204,10 @@ function endGame(room) {
             score: p.score || 0,
             dishesServed: p.dishesServed || 0,
             perfectDishes: p.perfectDishes || 0,
-            chefPoints: Math.floor((p.score || 0) / 10),
+            chefPoints: p.newChefPoints || 0,
+            xpGain: p.xpGain || 10,
+            won: !!p.won,
+            isTie: !!p.isTie,
             color: p.color,
         })),
     });

@@ -39,13 +39,13 @@ export class UIManager {
                 return ing?.emoji ? `<span title="${ing.name}">${ing.emoji}</span>` : i;
             }).join(' ');
             const chops = r.requiresChopping && r.requiresChopping.length > 0
-                ? `<br><i class="bi bi-scissors"></i> Chop: ${r.requiresChopping.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
+                ? `<br><img src="/assets/cutting-board.png" style="width: 1em; height: 1em; vertical-align: -0.125em; filter: invert(1);"> Chop: ${r.requiresChopping.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
             const rolls = r.requiresRolling && r.requiresRolling.length > 0
                 ? `<br><i class="bi bi-arrow-repeat"></i> Roll: ${r.requiresRolling.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
             const cooks = r.requiresCooking && r.requiresCooking.length > 0
-                ? `<br><i class="bi bi-fire"></i> Cook: ${r.requiresCooking.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
+                ? `<br><img src="/assets/hot-pot.png" style="width: 1em; height: 1em; vertical-align: -0.125em; filter: invert(1);"> Cook: ${r.requiresCooking.map(i => this.config.INGREDIENTS[i]?.emoji || i).join(' ')}`
                 : '';
 
             // Build process steps for pizza-like recipes
@@ -145,8 +145,8 @@ export class UIManager {
         if (holding.type === 'ingredient') {
             const ing = config.INGREDIENTS[holding.name];
             const status = [];
-            if (holding.chopped) status.push('<i class="bi bi-scissors"></i>');
-            if (holding.cooked) status.push('<i class="bi bi-fire"></i>');
+            if (holding.chopped) status.push('<img src="/assets/cutting-board.png" style="width: 1em; height: 1em; vertical-align: -0.125em; filter: brightness(0) invert(1);">');
+            if (holding.cooked) status.push('<img src="/assets/hot-pot.png" style="width: 1em; height: 1em; vertical-align: -0.125em; filter: brightness(0) invert(1);">');
             if (holding.rolled) status.push('<i class="bi bi-arrow-repeat"></i>');
             if (holding.washed) status.push('<i class="bi bi-droplet-fill"></i>');
             el.innerHTML = `${ing?.emoji || '?'} ${ing?.name || holding.name} ${status.join(' ')}`;
@@ -161,13 +161,13 @@ export class UIManager {
                     const ing = config.INGREDIENTS[ingName];
                     const emoji = ing?.emoji || '?';
                     const status = [];
-                    
+
                     // Check if this specific ingredient is chopped/cooked/rolled/washed
                     if (holding.chopped && holding.chopped.includes(ingName)) {
-                        status.push('<i class="bi bi-scissors" style="font-size: 10px;"></i>');
+                        status.push('<img src="/assets/cutting-board.png" style="width: 10px; height: 10px; vertical-align: middle; filter: brightness(0) invert(1);">');
                     }
                     if (holding.cooked && holding.cooked.includes(ingName)) {
-                        status.push('<i class="bi bi-fire" style="font-size: 10px;"></i>');
+                        status.push('<img src="/assets/hot-pot.png" style="width: 10px; height: 10px; vertical-align: middle; filter: brightness(0) invert(1);">');
                     }
                     if (holding.rolled && holding.rolled.includes(ingName)) {
                         status.push('<i class="bi bi-arrow-repeat" style="font-size: 10px;"></i>');
@@ -175,10 +175,10 @@ export class UIManager {
                     if (holding.washed && holding.washed.includes(ingName)) {
                         status.push('<i class="bi bi-droplet-fill" style="font-size: 10px;"></i>');
                     }
-                    
+
                     return `<span style="display: inline-flex; align-items: center; gap: 2px;">${emoji}${status.join('')}</span>`;
                 }).join(' ');
-                
+
                 el.innerHTML = `<i class="bi bi-circle-fill"></i> ${ingredientDetails}`;
                 el.style.color = '#f0f0f0';
             }
@@ -204,23 +204,30 @@ export class UIManager {
         setTimeout(() => el.remove(), 1200);
     }
 
-    showGameOver(data) {
+    showGameOver(data, playerId) {
         this.showScreen('gameover');
-        document.getElementById('final-score').textContent = data.score;
+
+        const localPlayer = data.players.find(p => p.id === playerId) || data.players[0] || {};
+
+        let displayScore = data.score;
+        if (data.mode === 'multi_vs') {
+            displayScore = localPlayer.score || 0;
+        }
+        document.getElementById('final-score').textContent = displayScore;
 
         const stats = document.getElementById('gameover-stats');
         stats.innerHTML = `
             <div class="stat-card">
-                <div class="stat-value">${data.ordersCompleted}</div>
+                <div class="stat-value">${localPlayer.dishesServed || 0}</div>
                 <div class="stat-label">Dishes Served</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">${data.ordersFailed}</div>
-                <div class="stat-label">Orders Failed</div>
+                <div class="stat-value"><img src="/assets/chef-hat-coin.png" style="width: 1.2em; height: 1.2em; vertical-align: -0.2em; margin-right: 4px;"> ${localPlayer.chefPoints || 0}</div>
+                <div class="stat-label">Chef Points</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">x${data.maxCombo}</div>
-                <div class="stat-label">Max Combo</div>
+                <div class="stat-value" style="color:var(--secondary)">+${localPlayer.xpGain || 0}</div>
+                <div class="stat-label">XP Gained</div>
             </div>
         `;
 
@@ -232,16 +239,51 @@ export class UIManager {
             </div>
         `).join('');
 
-        // Star rating
-        const stars = document.getElementById('star-rating');
-        const numStars = data.score >= 200 ? 3 : data.score >= 100 ? 2 : data.score >= 40 ? 1 : 0;
-        stars.innerHTML = '';
-        for (let i = 0; i < 3; i++) {
-            const span = document.createElement('span');
-            span.className = `star ${i < numStars ? '' : 'star-empty'}`;
-            span.innerHTML = '<i class="bi bi-star-fill"></i>';
-            stars.appendChild(span);
+        const performanceEl = document.getElementById('star-rating');
+        const titleEl = document.querySelector('.gameover-title');
+        let perfText = "Practice More";
+        let perfColor = "var(--text-muted)";
+        let titleText = "<i class=\"bi bi-stopwatch\"></i> Time's Up!";
+        let titleColor = "var(--text)";
+
+        if (data.mode === 'multi_vs') {
+            if (localPlayer.isTie) {
+                perfText = "IT'S A TIE!";
+                perfColor = "#F1C40F"; // Yellow
+                titleText = "<i class=\"bi bi-dash-circle\"></i> IT'S A TIE!";
+                titleColor = "#F1C40F";
+            } else if (localPlayer.won) {
+                perfText = "YOU WIN!";
+                perfColor = "var(--secondary)";
+                titleText = "<i class=\"bi bi-trophy-fill\"></i> YOU WIN!";
+                titleColor = "var(--secondary)";
+            } else {
+                perfText = "YOU LOSE!";
+                perfColor = "var(--danger)";
+                titleText = "<i class=\"bi bi-emoji-dizzy-fill\"></i> YOU LOSE!";
+                titleColor = "var(--danger)";
+            }
+        } else {
+            if (data.score > 0) {
+                perfText = "Good Job";
+                perfColor = "var(--accent)";
+            }
+            if (data.score >= 100) {
+                perfText = "Very Good";
+                perfColor = "var(--secondary)";
+            }
+            if (data.score >= 200) {
+                perfText = "Excellent!";
+                perfColor = "#A8E6CF"; // Mint green
+            }
         }
+
+        if (titleEl) {
+            titleEl.innerHTML = titleText;
+            titleEl.style.color = titleColor;
+        }
+
+        performanceEl.innerHTML = `<span style="color: ${perfColor}; font-family: var(--font-display); font-size: 32px; letter-spacing: 2px;">${perfText}</span>`;
     }
 
     setupChat() {

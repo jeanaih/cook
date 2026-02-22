@@ -9,6 +9,53 @@ let gameConfig = null;
 let roomState = null;
 let currentUser = null;
 let currentFriends = []; // Global list of friends for identifying friends in lobby
+let connectionTimeout = null;
+
+// Socket connection handling
+socket.on('connect', () => {
+    console.log('✅ Connected to server');
+    updateConnectionStatus('connected');
+    if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+    }
+});
+
+socket.on('disconnect', () => {
+    console.log('❌ Disconnected from server');
+    updateConnectionStatus('disconnected');
+});
+
+socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    updateConnectionStatus('disconnected');
+    showNotif('Connection Error', 'Failed to connect to server. Retrying...', 'error');
+});
+
+socket.on('reconnect', () => {
+    console.log('🔄 Reconnected to server');
+    updateConnectionStatus('connected');
+    // Retry login if we have saved user data
+    const savedLocal = localStorage.getItem('chef_user');
+    const savedGuest = localStorage.getItem('chef_user_guest');
+    const savedUser = savedLocal || savedGuest;
+    if (savedUser && !currentUser) {
+        try {
+            const user = JSON.parse(savedUser);
+            if (user.type === 'account') {
+                socket.emit('userLogin', {
+                    autoLogin: true,
+                    userId: user.id,
+                    username: user.username
+                });
+            } else {
+                socket.emit('guestLogin', { userId: user.id, name: user.name });
+            }
+        } catch (e) {
+            console.error('Error parsing saved user on reconnect:', e);
+        }
+    }
+});
 
 const getStatusText = (status) => {
     switch (status) {
@@ -100,7 +147,9 @@ scene.add(fillLight);
 let kitchen = null;
 let ui = null;
 const playerMeshes = {};
+const droppedItemMeshes = {};
 const keys = {};
+window.keys = keys; // Expose for mobile controls
 let moveTimer = 0;
 let lastChopEmit = 0;
 let spacePressedTime = 0;
@@ -363,6 +412,13 @@ socket.on('loginSuccess', (user) => {
         }
     }
 
+    // Load leaderboard
+    setTimeout(() => {
+        if (typeof fetchMainLeaderboard === 'function') {
+            fetchMainLeaderboard();
+        }
+    }, 500);
+
     console.log(`✅ Logged in as ${user.name || user.username}`);
 });
 
@@ -508,6 +564,81 @@ window.addFriendFromPanel = () => {
     document.getElementById('friends-panel-add-input').value = '';
 };
 
+// ============ LEADERBOARD FUNCTIONS ============
+let currentLeaderboardCategory = 'score';
+
+window.switchShopCategory = (category, btn) => {
+    // Update button states
+    document.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // TODO: Load shop items for this category
+    const listEl = document.getElementById('shop-items-list');
+    if (listEl) {
+        listEl.innerHTML = '<p style="text-align:center; color:var(--text-dim); padding:40px;">Coming Soon! 🎮</p>';
+    }
+};
+
+window.switchMainLeaderboardCategory = (category, btn) => {
+    currentLeaderboardCategory = category;
+
+    // Update button states
+    document.querySelectorAll('.lb-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Fetch new leaderboard data
+    fetchMainLeaderboard();
+};
+
+async function fetchMainLeaderboard() {
+    const listEl = document.getElementById('main-menu-leaderboard-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div class="loading-spinner-small">Loading...</div>';
+
+    try {
+        const response = await fetch(`/api/leaderboard?category=${currentLeaderboardCategory}&limit=10`);
+        const data = await response.json();
+
+        if (data.length === 0) {
+            listEl.innerHTML = '<div class="loading-spinner-small">No data yet</div>';
+            return;
+        }
+
+        listEl.innerHTML = data.map(player => {
+            const rankClass = player.rank <= 3 ? `rank-${player.rank}` : '';
+            let statValue;
+
+            switch (currentLeaderboardCategory) {
+                case 'wins':
+                    statValue = `${player.wins} wins`;
+                    break;
+                case 'dishes':
+                    statValue = `${player.dishesServed} dishes`;
+                    break;
+                case 'score':
+                default:
+                    statValue = `${player.totalScore} pts`;
+                    break;
+            }
+
+            return `
+                <div class="leaderboard-item ${rankClass}">
+                    <div class="leaderboard-rank">${player.rank}</div>
+                    <img src="${getAvatarUrl(player.profileImage)}" class="leaderboard-avatar" alt="${player.username}">
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">${player.username}</div>
+                        <div class="leaderboard-stat">${statValue}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        listEl.innerHTML = '<div class="loading-spinner-small">Failed to load</div>';
+    }
+}
+
 // Chat Toggle
 window.toggleChat = () => {
     const chat = document.getElementById('chat-container');
@@ -570,46 +701,467 @@ window.showKickModal = (playerId, playerName) => {
     document.getElementById('kick-modal').classList.remove('hidden');
 };
 
-// ============ PROFILE CUSTOMIZATION ============
+// ============ PROFILE AND STATS ============
 let selectedAvatarKey = 'chef_1';
 
+window.switchProfileTab = (tabId) => {
+    // Update tab buttons
+    document.querySelectorAll('.profile-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.id === `btn-tab-${tabId}`);
+    });
 
-window.openProfileCustomization = () => {
-    if (!currentUser || currentUser.type === 'guest') {
-        showNotif('Notice', 'Please create an account to customize your profile!', 'info');
+    // Update tab content
+    document.querySelectorAll('.profile-tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `profile-tab-${tabId}`);
+    });
+};
+
+window.openProfileCustomization = (initialTab = 'stats') => {
+    console.log('🎯 openProfileCustomization called with tab:', initialTab);
+    console.log('👤 currentUser:', currentUser);
+
+    if (!currentUser) {
+        console.log('❌ No currentUser - showing error notification');
+        showNotif('Notice', 'Please login to view your profile!', 'info');
         return;
     }
 
     const modal = document.getElementById('profile-modal');
-    const nameInput = document.getElementById('profile-new-username');
-    const previewName = document.getElementById('profile-preview-name');
-    const previewImg = document.getElementById('profile-preview-img');
+    console.log('📱 Modal element:', modal);
 
-    nameInput.value = currentUser.name || currentUser.username;
-    previewName.textContent = currentUser.name || currentUser.username;
+    if (!modal) {
+        console.log('❌ Modal element not found!');
+        return;
+    }
 
+    // Default to stats or specified tab
+    switchProfileTab(initialTab);
+
+    // Populate profile data
+    populateProfileData();
+
+    console.log('✅ Opening profile modal');
+    modal.classList.remove('hidden');
+};
+
+function populateProfileData() {
+    // Sidebar Info
+    const displayName = document.getElementById('profile-display-name');
+    const displayImg = document.getElementById('profile-display-img');
+    const levelBadge = document.getElementById('profile-level-badge');
+    const xpText = document.getElementById('profile-xp-text');
+    const xpBar = document.getElementById('profile-xp-bar');
+
+    if (displayName) displayName.textContent = currentUser.name || currentUser.username;
     selectedAvatarKey = currentUser.profileImage || 'chef_1';
-    previewImg.src = getAvatarUrl(selectedAvatarKey);
+    if (displayImg) displayImg.src = getAvatarUrl(selectedAvatarKey);
 
-    updateProfilePreview();
+    // User ID
+    const displayId = document.getElementById('profile-display-id');
+    const actualId = currentUser.uid || currentUser.id || '000000';
+    if (displayId) displayId.textContent = `#${actualId}`;
+
+    // Progress/Level Stats
+    const level = currentUser.level || 1;
+    const currentXp = currentUser.xp || 0;
+    const maxXp = level * 50; // Requirement increases by 50 per level
+    if (levelBadge) levelBadge.textContent = `Lv. ${level}`;
+    if (xpText) xpText.textContent = `${currentXp} / ${maxXp} XP`;
+    if (xpBar) xpBar.style.width = `${(currentXp / maxXp) * 100}%`;
+
+    // Game Statistics
+    const stats = currentUser.stats || {};
+    if (document.getElementById('stat-served')) document.getElementById('stat-served').textContent = stats.dishesServed || 0;
+    if (document.getElementById('stat-played')) document.getElementById('stat-played').textContent = stats.gamesPlayed || 0;
+    if (document.getElementById('stat-wins')) document.getElementById('stat-wins').textContent = stats.wins || 0;
+
+    if (document.getElementById('stat-chopped')) document.getElementById('stat-chopped').textContent = stats.itemsChopped || 0;
+    if (document.getElementById('stat-cooked')) document.getElementById('stat-cooked').textContent = stats.itemsCooked || 0;
+
+    // Render Match History
+    const historyList = document.getElementById('profile-history-list');
+    if (historyList) {
+        if (!stats.gameScores || stats.gameScores.length === 0) {
+            historyList.innerHTML = '<p style="text-align:center; color:var(--text-dim); margin-top:20px;">No match history yet.</p>';
+        } else {
+            // Sort by most recent first, max 12
+            const recentGames = [...stats.gameScores].sort((a, b) => b.date - a.date).slice(0, 12);
+
+            historyList.innerHTML = recentGames.map(game => {
+                const dateObj = new Date(game.date);
+                const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                let statusClass = 'loss';
+                let statusDisplay = '<i class="bi bi-person-fill"></i>';
+
+                if (game.mode === 'multi_vs' || (game.opponent && game.mode !== 'multi_coop')) {
+                    // VS Mode - show win/lose/tie text
+                    if (game.won) {
+                        statusClass = 'win';
+                        statusDisplay = 'Win';
+                    } else if (game.isTie) {
+                        statusClass = 'tie';
+                        statusDisplay = 'Tie';
+                    } else {
+                        statusClass = 'loss';
+                        statusDisplay = 'Lose';
+                    }
+                } else if (game.mode === 'multi_coop') {
+                    // Co-op Mode - show double friend icon
+                    statusClass = 'coop';
+                    statusDisplay = '<i class="bi bi-people-fill"></i>';
+                } else {
+                    // Single Player - show single profile icon
+                    statusClass = 'single';
+                    statusDisplay = '<i class="bi bi-person-fill"></i>';
+                }
+
+                let modeDisplay = 'Single Player'; // Default fallback
+                if (game.mode === 'multi_coop') modeDisplay = 'Co-op';
+                else if (game.mode === 'multi_vs' || game.opponent) modeDisplay = 'VS Battle';
+                else if (game.mode === 'single') modeDisplay = 'Single Player';
+
+                let details = `Dishes: ${game.dishesServed || 0} | XP: +${game.xpEarned || 0} | <img src="/assets/chef-hat-coin.png" style="width: 1em; height: 1em; vertical-align: -0.125em;"> +${game.chefHatEarned || 0}`;
+
+                // VS Battle layout: Status - Name - VS - Opponent Name - Status
+                if (game.mode === 'multi_vs' || (game.opponent && game.mode !== 'multi_coop')) {
+                    const opponentStatusClass = game.won ? 'loss' : (game.isTie ? 'tie' : 'win');
+                    const opponentStatusDisplay = game.won ? 'Lose' : (game.isTie ? 'Tie' : 'Win');
+
+                    return `
+                    <div class="history-item history-item-vs">
+                        <div class="history-status ${statusClass}">${statusDisplay}</div>
+                        <div class="history-player-name">${currentUser.name || currentUser.username}</div>
+                        <div class="history-vs-divider">VS</div>
+                        <div class="history-player-name">${game.opponent}</div>
+                        <div class="history-status ${opponentStatusClass}">${opponentStatusDisplay}</div>
+                        <div class="history-vs-info">${dateStr} &bull; ${details}</div>
+                    </div>
+                    `;
+                }
+
+                // Co-op or Single Player layout (original)
+                if (game.mode === 'multi_coop') details += ` | with ${game.opponent}`;
+
+                return `
+                <div class="history-item">
+                    <div class="history-status ${statusClass}">${statusDisplay}</div>
+                    <div class="history-details">
+                        <div class="history-mode">${modeDisplay}</div>
+                        <div class="history-date">${dateStr} &bull; ${details}</div>
+                    </div>
+                    <div class="history-score">${game.score || 0} pts</div>
+                </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // Settings (Minimized Customize)
+    const nameInput = document.getElementById('profile-new-username');
+    if (nameInput) nameInput.value = currentUser.name || currentUser.username;
 
     // Update avatar grid selection
     document.querySelectorAll('.avatar-option').forEach(opt => {
         const key = opt.getAttribute('data-key');
         if (key) {
             opt.classList.toggle('selected', key === selectedAvatarKey);
-        } else {
-            // Fallback to title/alt or older method if data-key not found
-            const onclickText = opt.getAttribute('onclick') || "";
-            opt.classList.toggle('selected', onclickText.includes(`'${selectedAvatarKey}'`));
         }
     });
 
-    modal.classList.remove('hidden');
-};
+    // Render Achievements
+    const achievementsGrid = document.getElementById('profile-achievements-grid');
+    if (achievementsGrid) {
+        const unlockedAchievements = stats.achievements || [];
+        const unlockedIds = unlockedAchievements.map(a => a.id);
+
+        // Define all achievements with icons
+        const allAchievements = [
+            { id: 'first_dish', name: 'First Dish!', description: 'Serve your first dish', icon: 'main-dish.png' },
+            { id: 'kitchen_novice', name: 'Kitchen Novice', description: 'Win your first game', icon: 'bi-trophy' },
+
+            // Multiplayer
+            { id: 'coop_first', name: 'Teamwork!', description: 'Play your first co-op game', icon: 'bi-people' },
+            { id: 'coop_5', name: 'Good Partner', description: 'Play 5 co-op games', icon: 'bi-people' },
+            { id: 'coop_10', name: 'Team Player', description: 'Play 10 co-op games', icon: 'bi-people' },
+            { id: 'coop_25', name: 'Best Friends', description: 'Play 25 co-op games', icon: 'bi-people' },
+            { id: 'coop_50', name: 'Dynamic Duo', description: 'Play 50 co-op games', icon: 'bi-people' },
+
+            // Score progression (5 levels)
+            { id: 'score_100', name: 'Century Chef', description: 'Score 100 points in a game', icon: 'bi-star' },
+            { id: 'score_200', name: 'Double Century', description: 'Score 200 points in a game', icon: 'bi-star' },
+            { id: 'score_300', name: 'Triple Century', description: 'Score 300 points in a game', icon: 'bi-star' },
+            { id: 'score_400', name: 'Quad Century', description: 'Score 400 points in a game', icon: 'bi-star' },
+            { id: 'score_500', name: 'Legendary Chef', description: 'Score 500 points in a game', icon: 'bi-star' },
+
+            // Dishes per game (5 levels)
+            { id: 'dishes_5', name: 'Busy Chef', description: 'Serve 5 dishes in a game', icon: 'bi-basket' },
+            { id: 'dishes_10', name: 'Master Chef', description: 'Serve 10 dishes in a game', icon: 'bi-basket' },
+            { id: 'dishes_15', name: 'Expert Chef', description: 'Serve 15 dishes in a game', icon: 'bi-basket' },
+            { id: 'dishes_20', name: 'Elite Chef', description: 'Serve 20 dishes in a game', icon: 'bi-basket' },
+            { id: 'dishes_25', name: 'Godlike Chef', description: 'Serve 25 dishes in a game', icon: 'bi-basket' },
+
+            // Perfect dishes (5 levels)
+            { id: 'perfect_3', name: 'Perfectionist', description: 'Serve 3 perfect dishes in a game', icon: 'bi-gem' },
+            { id: 'perfect_5', name: 'Flawless Cook', description: 'Serve 5 perfect dishes in a game', icon: 'bi-gem' },
+            { id: 'perfect_8', name: 'Perfect Master', description: 'Serve 8 perfect dishes in a game', icon: 'bi-gem' },
+            { id: 'perfect_12', name: 'Precision Expert', description: 'Serve 12 perfect dishes in a game', icon: 'bi-gem' },
+            { id: 'perfect_15', name: 'Perfection Incarnate', description: 'Serve 15 perfect dishes in a game', icon: 'bi-gem' },
+
+            // Games played (5 levels)
+            { id: 'games_10', name: 'Veteran Chef', description: 'Play 10 games', icon: 'chef.png' },
+            { id: 'games_25', name: 'Seasoned Pro', description: 'Play 25 games', icon: 'chef.png' },
+            { id: 'games_50', name: 'Kitchen Legend', description: 'Play 50 games', icon: 'chef.png' },
+            { id: 'games_100', name: 'Culinary Master', description: 'Play 100 games', icon: 'chef.png' },
+            { id: 'games_200', name: 'Eternal Chef', description: 'Play 200 games', icon: 'chef.png' }
+        ];
+
+        achievementsGrid.innerHTML = allAchievements.map(achievement => {
+            const isUnlocked = unlockedIds.includes(achievement.id);
+            let progressText = '';
+            let progressPercent = 0;
+            const achievementId = achievement.id;
+
+            // Determine current progress level for this achievement category
+            let currentProgressLevel = 0;
+
+            // Check which achievements in the same category are unlocked to determine progress
+            if (achievementId.startsWith('coop_')) {
+                if (unlockedIds.includes('coop_50')) currentProgressLevel = 5;
+                else if (unlockedIds.includes('coop_25')) currentProgressLevel = 4;
+                else if (unlockedIds.includes('coop_10')) currentProgressLevel = 3;
+                else if (unlockedIds.includes('coop_5')) currentProgressLevel = 2;
+                else if (unlockedIds.includes('coop_first')) currentProgressLevel = 1;
+            } else if (achievementId.startsWith('score_')) {
+                if (unlockedIds.includes('score_500')) currentProgressLevel = 5;
+                else if (unlockedIds.includes('score_400')) currentProgressLevel = 4;
+                else if (unlockedIds.includes('score_300')) currentProgressLevel = 3;
+                else if (unlockedIds.includes('score_200')) currentProgressLevel = 2;
+                else if (unlockedIds.includes('score_100')) currentProgressLevel = 1;
+            } else if (achievementId.startsWith('dishes_')) {
+                if (unlockedIds.includes('dishes_25')) currentProgressLevel = 5;
+                else if (unlockedIds.includes('dishes_20')) currentProgressLevel = 4;
+                else if (unlockedIds.includes('dishes_15')) currentProgressLevel = 3;
+                else if (unlockedIds.includes('dishes_10')) currentProgressLevel = 2;
+                else if (unlockedIds.includes('dishes_5')) currentProgressLevel = 1;
+            } else if (achievementId.startsWith('perfect_')) {
+                if (unlockedIds.includes('perfect_15')) currentProgressLevel = 5;
+                else if (unlockedIds.includes('perfect_12')) currentProgressLevel = 4;
+                else if (unlockedIds.includes('perfect_8')) currentProgressLevel = 3;
+                else if (unlockedIds.includes('perfect_5')) currentProgressLevel = 2;
+                else if (unlockedIds.includes('perfect_3')) currentProgressLevel = 1;
+            } else if (achievementId.startsWith('games_')) {
+                if (unlockedIds.includes('games_200')) currentProgressLevel = 5;
+                else if (unlockedIds.includes('games_100')) currentProgressLevel = 4;
+                else if (unlockedIds.includes('games_50')) currentProgressLevel = 3;
+                else if (unlockedIds.includes('games_25')) currentProgressLevel = 2;
+                else if (unlockedIds.includes('games_10')) currentProgressLevel = 1;
+            }
+
+            if (achievement.id === 'kitchen_novice') {
+                const current = stats.wins || 0;
+                const target = 1;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'first_dish') {
+                const current = stats.dishesServed || 0;
+                const target = 1;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            }
+            // Co-op achievements
+            else if (achievement.id === 'coop_first') {
+                const current = stats.coopGames || 0;
+                const target = 1;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'coop_5') {
+                const current = stats.coopGames || 0;
+                const target = 5;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'coop_10') {
+                const current = stats.coopGames || 0;
+                const target = 10;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'coop_25') {
+                const current = stats.coopGames || 0;
+                const target = 25;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'coop_50') {
+                const current = stats.coopGames || 0;
+                const target = 50;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            }
+            // Score achievements
+            else if (achievement.id === 'score_100') {
+                if (!isUnlocked) progressText = 'Score 100 in a game';
+            } else if (achievement.id === 'score_200') {
+                if (!isUnlocked) progressText = 'Score 200 in a game';
+            } else if (achievement.id === 'score_300') {
+                if (!isUnlocked) progressText = 'Score 300 in a game';
+            } else if (achievement.id === 'score_400') {
+                if (!isUnlocked) progressText = 'Score 400 in a game';
+            } else if (achievement.id === 'score_500') {
+                if (!isUnlocked) progressText = 'Score 500 in a game';
+            }
+            // Dishes per game
+            else if (achievement.id === 'dishes_5') {
+                if (!isUnlocked) progressText = 'Serve 5 in a game';
+            } else if (achievement.id === 'dishes_10') {
+                if (!isUnlocked) progressText = 'Serve 10 in a game';
+            } else if (achievement.id === 'dishes_15') {
+                if (!isUnlocked) progressText = 'Serve 15 in a game';
+            } else if (achievement.id === 'dishes_20') {
+                if (!isUnlocked) progressText = 'Serve 20 in a game';
+            } else if (achievement.id === 'dishes_25') {
+                if (!isUnlocked) progressText = 'Serve 25 in a game';
+            }
+            // Perfect dishes
+            else if (achievement.id === 'perfect_3') {
+                if (!isUnlocked) progressText = 'Serve 3 perfect in a game';
+            } else if (achievement.id === 'perfect_5') {
+                if (!isUnlocked) progressText = 'Serve 5 perfect in a game';
+            } else if (achievement.id === 'perfect_8') {
+                if (!isUnlocked) progressText = 'Serve 8 perfect in a game';
+            } else if (achievement.id === 'perfect_12') {
+                if (!isUnlocked) progressText = 'Serve 12 perfect in a game';
+            } else if (achievement.id === 'perfect_15') {
+                if (!isUnlocked) progressText = 'Serve 15 perfect in a game';
+            }
+            // Games played
+            else if (achievement.id === 'games_10') {
+                const current = stats.gamesPlayed || 0;
+                const target = 10;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'games_25') {
+                const current = stats.gamesPlayed || 0;
+                const target = 25;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'games_50') {
+                const current = stats.gamesPlayed || 0;
+                const target = 50;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'games_100') {
+                const current = stats.gamesPlayed || 0;
+                const target = 100;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            } else if (achievement.id === 'games_200') {
+                const current = stats.gamesPlayed || 0;
+                const target = 200;
+                progressText = `${current}/${target}`;
+                progressPercent = Math.min((current / target) * 100, 100);
+            }
+
+            // Determine achievement level (1-5 bars) - this is the target level for THIS achievement
+            let level = 0;
+
+            // Co-op levels
+            if (achievementId === 'coop_first') level = 1;
+            else if (achievementId === 'coop_5') level = 2;
+            else if (achievementId === 'coop_10') level = 3;
+            else if (achievementId === 'coop_25') level = 4;
+            else if (achievementId === 'coop_50') level = 5;
+            // Score levels
+            else if (achievementId === 'score_100') level = 1;
+            else if (achievementId === 'score_200') level = 2;
+            else if (achievementId === 'score_300') level = 3;
+            else if (achievementId === 'score_400') level = 4;
+            else if (achievementId === 'score_500') level = 5;
+            // Dishes levels
+            else if (achievementId === 'dishes_5') level = 1;
+            else if (achievementId === 'dishes_10') level = 2;
+            else if (achievementId === 'dishes_15') level = 3;
+            else if (achievementId === 'dishes_20') level = 4;
+            else if (achievementId === 'dishes_25') level = 5;
+            // Perfect levels
+            else if (achievementId === 'perfect_3') level = 1;
+            else if (achievementId === 'perfect_5') level = 2;
+            else if (achievementId === 'perfect_8') level = 3;
+            else if (achievementId === 'perfect_12') level = 4;
+            else if (achievementId === 'perfect_15') level = 5;
+            // Games played levels
+            else if (achievementId === 'games_10') level = 1;
+            else if (achievementId === 'games_25') level = 2;
+            else if (achievementId === 'games_50') level = 3;
+            else if (achievementId === 'games_100') level = 4;
+            else if (achievementId === 'games_200') level = 5;
+
+            // Generate level bars HTML - show progress based on currentProgressLevel
+            let levelBars = '';
+            if (level > 0) {
+                levelBars = '<div class="achievement-level-bars">';
+                for (let i = 1; i <= 5; i++) {
+                    // Bar is active if current progress has reached this level
+                    levelBars += `<div class="level-bar ${i <= currentProgressLevel ? 'active' : ''}"></div>`;
+                }
+                levelBars += '</div>';
+            }
+
+            // Determine if icon is an image or Bootstrap icon
+            const isImageIcon = achievement.icon.includes('.png') || achievement.icon.includes('.jpg');
+            let iconHtml = '';
+            if (isImageIcon) {
+                iconHtml = `<img src="/assets/${achievement.icon}" class="achievement-img-icon ${isUnlocked ? 'unlocked' : 'locked'}" alt="${achievement.name}">`;
+            } else {
+                iconHtml = `<i class="bi ${isUnlocked ? achievement.icon + '-fill' : achievement.icon}"></i>`;
+            }
+
+            return `
+                <div class="achievement-card ${isUnlocked ? 'unlocked' : 'locked'}">
+                    <div class="achievement-icon-wrapper">
+                        ${iconHtml}
+                        <i class="bi bi-info-circle achievement-info-icon" onclick="showAchievementInfo('${achievement.id}', '${achievement.name.replace(/'/g, "\\'")}', '${achievement.description.replace(/'/g, "\\'")}')"></i>
+                    </div>
+                    <span>${achievement.name}</span>
+                    ${levelBars}
+                    ${progressPercent > 0 && progressPercent < 100 ? `<div class="progress-bar"><div class="progress-fill" style="width: ${progressPercent}%"></div></div>` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+}
 
 window.closeProfileModal = () => {
-    document.getElementById('profile-modal').classList.add('hidden');
+    const modal = document.getElementById('profile-modal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.showAchievementInfo = (id, name, description) => {
+    showNotif(name, description, 'info');
+};
+
+window.copyUserId = () => {
+    const idToCopy = currentUser.uid || currentUser.id;
+    if (!currentUser || !idToCopy) return;
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(idToCopy).then(() => {
+            showNotif('Copied', 'User ID copied to clipboard!', 'success');
+        }).catch(err => {
+            console.error('Could not copy text: ', err);
+        });
+    } else {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = idToCopy;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showNotif('Copied', 'User ID copied to clipboard!', 'success');
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+        document.body.removeChild(textArea);
+    }
 };
 
 window.selectAvatar = (key, elem) => {
@@ -617,24 +1169,21 @@ window.selectAvatar = (key, elem) => {
     document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
     elem.classList.add('selected');
 
-    const previewImg = document.getElementById('profile-preview-img');
-    if (previewImg) previewImg.src = getAvatarUrl(key);
+    const displayImg = document.getElementById('profile-display-img');
+    if (displayImg) displayImg.src = getAvatarUrl(key);
 };
 
 window.updateProfilePreview = () => {
     const nameInput = document.getElementById('profile-new-username');
-    const previewName = document.getElementById('profile-preview-name');
-    if (nameInput && previewName) {
-        previewName.textContent = nameInput.value || 'Chef';
+    const displayName = document.getElementById('profile-display-name');
+    if (nameInput && displayName) {
+        displayName.textContent = nameInput.value || 'Chef';
     }
 };
 
 window.saveProfileChanges = () => {
     const nameInput = document.getElementById('profile-new-username');
-    if (!nameInput) {
-        console.error('❌ Profile input not found');
-        return;
-    }
+    if (!nameInput) return;
 
     const newUsername = nameInput.value.trim();
     if (newUsername.length < 3) {
@@ -667,6 +1216,10 @@ socket.on('updateProfileSuccess', (data) => {
 
 socket.on('updateProfileError', (data) => {
     showNotif('Error', data.msg, 'error');
+});
+
+socket.on('userProfile', (data) => {
+    currentUser = data;
 });
 
 socket.on('playerProfileUpdated', (data) => {
@@ -723,6 +1276,8 @@ function startPingTracking() {
 
 // Initial setup
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('🏁 DOM Content Loaded - Starting game initialization');
+
     // Select defaults
     const singleOptions = document.querySelectorAll('#menu-single .banner-option');
     if (singleOptions.length > 0) singleOptions[0].classList.add('selected');
@@ -730,29 +1285,74 @@ document.addEventListener('DOMContentLoaded', () => {
     const createOptions = document.querySelectorAll('#menu-create .banner-option');
     if (createOptions.length > 0) createOptions[0].classList.add('selected');
 
-    // Auto-login if previously saved
-    const savedLocal = localStorage.getItem('chef_user');
-    const savedGuest = localStorage.getItem('chef_user_guest');
-    const savedUser = savedLocal || savedGuest;
+    // Auto-login timeout - if no login response after 10 seconds, show login screen
+    let loginTimeout = setTimeout(() => {
+        console.log('⏰ Auto-login timeout - showing login screen');
+        updateConnectionStatus('disconnected');
+        // Don't automatically show login - wait for connection first
+    }, 10000);
 
-    if (savedUser) {
-        try {
-            const user = JSON.parse(savedUser);
-            if (user.type === 'account') {
-                socket.emit('userLogin', {
-                    autoLogin: true,
-                    userId: user.id,
-                    username: user.username
-                });
-            } else {
-                socket.emit('guestLogin', { userId: user.id, name: user.name });
+    // Auto-login if previously saved
+    const attemptAutoLogin = () => {
+        console.log('🔐 Attempting auto-login...');
+        const savedLocal = localStorage.getItem('chef_user');
+        const savedGuest = localStorage.getItem('chef_user_guest');
+        const savedUser = savedLocal || savedGuest;
+
+        if (savedUser) {
+            try {
+                const user = JSON.parse(savedUser);
+                console.log('📦 Found saved user:', user.type, user.username || user.name);
+
+                if (user.type === 'account') {
+                    console.log('👤 Sending account auto-login...');
+                    socket.emit('userLogin', {
+                        autoLogin: true,
+                        userId: user.id,
+                        username: user.username
+                    });
+                } else {
+                    console.log('🎭 Sending guest auto-login...');
+                    socket.emit('guestLogin', { userId: user.id, name: user.name });
+                }
+            } catch (e) {
+                console.error('❌ Error parsing saved user:', e);
+                localStorage.removeItem('chef_user');
+                localStorage.removeItem('chef_user_guest');
+                clearTimeout(loginTimeout);
+                updateConnectionStatus('connected'); // Show login screen
             }
-        } catch (e) {
-            console.error('Error parsing saved user:', e);
-            localStorage.removeItem('chef_user');
-            localStorage.removeItem('chef_user_guest');
+        } else {
+            console.log('📭 No saved user found - showing login screen');
+            clearTimeout(loginTimeout);
+            updateConnectionStatus('connected'); // Show login screen
         }
+    };
+
+    // Wait for socket connection before attempting auto-login
+    if (socket.connected) {
+        console.log('🔗 Socket already connected - attempting auto-login');
+        attemptAutoLogin();
+    } else {
+        console.log('⏳ Waiting for socket connection...');
+        socket.on('connect', () => {
+            console.log('🔗 Socket connected - attempting auto-login');
+            attemptAutoLogin();
+        });
     }
+
+    // Clear timeout when login succeeds
+    socket.on('loginSuccess', () => {
+        console.log('✅ Login successful');
+        clearTimeout(loginTimeout);
+    });
+
+    // Clear timeout on login error and show login screen
+    socket.on('loginError', (data) => {
+        console.log('❌ Login error:', data);
+        clearTimeout(loginTimeout);
+        updateConnectionStatus('connected');
+    });
 });
 
 // START SINGLE PLAYER
@@ -1017,6 +1617,14 @@ socket.on('init', (data) => {
         Object.keys(playerMeshes || {}).forEach(id => removePlayerMesh(id));
         Object.values(roomState.players).forEach(p => {
             try { createPlayerMesh(p); } catch (e) { console.error('Error creating player mesh:', e); }
+        });
+    }
+
+    // (Re)create dropped item meshes
+    if (roomState.droppedItems) {
+        Object.keys(droppedItemMeshes || {}).forEach(id => removeDroppedItemMesh(id));
+        Object.values(roomState.droppedItems).forEach(item => {
+            try { createDroppedItemMesh(item); } catch (e) { console.error('Error creating dropped item mesh:', e); }
         });
     }
 });
@@ -2254,6 +2862,46 @@ socket.on('playerKickedNotification', (data) => {
     }
 });
 
+// ============ DROPPED ITEMS EVENTS ============
+socket.on('itemThrown', (data) => {
+    if (!roomState) return;
+    if (!roomState.droppedItems) roomState.droppedItems = {};
+    roomState.droppedItems[data.itemId] = data.item;
+    createDroppedItemMesh(data.item);
+});
+
+socket.on('itemPickedUp', (data) => {
+    if (!roomState || !roomState.droppedItems) return;
+    delete roomState.droppedItems[data.itemId];
+    removeDroppedItemMesh(data.itemId);
+
+    if (data.trashed) {
+        showNotif('🗑️ Trashed!', 'Ingredient discarded', 'info');
+    }
+});
+
+socket.on('trashEffect', (data) => {
+    if (kitchen && kitchen.stationEffects[data.stationId]) {
+        const eff = kitchen.stationEffects[data.stationId];
+        eff.lidOpen = true;
+        // Keep it open for a bit
+        setTimeout(() => {
+            eff.lidOpen = false;
+        }, 1200);
+    }
+});
+
+socket.on('droppedItemUpdate', (data) => {
+    if (!roomState || !roomState.droppedItems) return;
+    const item = roomState.droppedItems[data.itemId];
+    if (item) {
+        item.x = data.x;
+        item.y = data.y;
+        item.z = data.z;
+        updateDroppedItemMesh(data.itemId, data.x, data.y, data.z);
+    }
+});
+
 // ============ PLAYER MESH ============
 function createPlayerMesh(player) {
     if (playerMeshes[player.id]) removePlayerMesh(player.id);
@@ -2307,8 +2955,37 @@ function createPlayerMesh(player) {
 
     const ts = gameConfig.TILE_SIZE;
     group.position.set(player.gridX * ts, 0, player.gridZ * ts);
+
+    // THROW INDICATOR (only for local player)
+    let throwArrow = null;
+    if (player.id === playerId) {
+        const arrowGroup = new THREE.Group();
+
+        // Make an arrowhead
+        const arrowGeo = new THREE.ConeGeometry(0.5, 1, 8);
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+        const cone = new THREE.Mesh(arrowGeo, arrowMat);
+        cone.position.set(0, 0, 1.5); // stick out in front
+        cone.rotation.x = -Math.PI / 2;
+
+        // Stem
+        const stemGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8);
+        const stem = new THREE.Mesh(stemGeo, arrowMat);
+        stem.position.set(0, 0, 0.75);
+        stem.rotation.x = Math.PI / 2;
+
+        arrowGroup.add(cone);
+        arrowGroup.add(stem);
+
+        arrowGroup.position.set(0, 0.1, 0); // slightly above ground
+        arrowGroup.visible = false;
+
+        group.add(arrowGroup);
+        throwArrow = { group: arrowGroup, mat: arrowMat, cone: cone, stem: stem };
+    }
+
     scene.add(group);
-    playerMeshes[player.id] = { group, body, head, hat, bobTime: Math.random() * 10 };
+    playerMeshes[player.id] = { group, body, head, hat, throwArrow, bobTime: Math.random() * 10 };
 
     // Initialize held item
     if (player.holding) {
@@ -2324,6 +3001,102 @@ function removePlayerMesh(id) {
     if (playerMeshes[id]) {
         scene.remove(playerMeshes[id].group);
         delete playerMeshes[id];
+    }
+}
+
+// ============ DROPPED ITEMS VISUALS ============
+function createDroppedItemMesh(item) {
+    if (droppedItemMeshes[item.id]) {
+        scene.remove(droppedItemMeshes[item.id]);
+    }
+    const group = new THREE.Group();
+
+    // Check type and create appropriate child mesh
+    if (item.data) {
+        if (item.data.type === 'ingredient') {
+            createHeldIngredient(group, item.data);
+        } else if (item.data.type === 'plate') {
+            createHeldPlate(group, item.data);
+        }
+    }
+
+    // Scale significantly larger so it's very visible as a "giant recipe" on floor
+    group.scale.set(3.5, 3.5, 3.5);
+
+    group.position.set(item.x, item.y || 0.1, item.z);
+
+    // Slight random rotation for chaos physics visual
+    group.rotation.set(0, Math.random() * Math.PI, 0);
+
+    scene.add(group);
+    droppedItemMeshes[item.id] = group;
+}
+
+function removeDroppedItemMesh(itemId) {
+    if (droppedItemMeshes[itemId]) {
+        scene.remove(droppedItemMeshes[itemId]);
+        delete droppedItemMeshes[itemId];
+    }
+}
+
+function updateDroppedItemMesh(itemId, x, y, z) {
+    const mesh = droppedItemMeshes[itemId];
+    if (mesh) {
+        mesh.position.set(x, y, z);
+        // Spin while moving/bouncing
+        if (y > 0.1) {
+            mesh.rotation.x += 0.1;
+            mesh.rotation.z += 0.1;
+        } else {
+            // Settle out rotation flatly
+            mesh.rotation.x *= 0.8;
+            mesh.rotation.z *= 0.8;
+        }
+    }
+}
+
+// Update throw indicator in the render loop/game tick (game.js)
+// We will hook this into the movement interpolation tick or similar
+function updateThrowIndicator() {
+    if (!roomState || roomState.state !== 'playing') return;
+    const me = roomState.players[playerId];
+    if (!me || !playerMeshes[playerId] || !playerMeshes[playerId].throwArrow) return;
+
+    const arrow = playerMeshes[playerId].throwArrow;
+
+    if (keys.e_pressed_time && me.holding) {
+        const holdTime = Date.now() - keys.e_pressed_time;
+        // Max power is 400ms (much faster charge)
+        const powerRatio = Math.min(1.0, holdTime / 400);
+
+        arrow.group.visible = true;
+
+        // Scale the arrow length
+        const stemLength = 1.5 + powerRatio * 2.0;
+        arrow.stem.scale.set(1, 1, stemLength / 1.5);
+        arrow.cone.position.z = stemLength;
+
+        // Color transition: Green -> Yellow -> Red
+        let r, g;
+        if (powerRatio < 0.5) {
+            // Green to Yellow
+            r = Math.floor(255 * (powerRatio * 2));
+            g = 255;
+        } else {
+            // Yellow to Red
+            r = 255;
+            g = Math.floor(255 * (1 - (powerRatio - 0.5) * 2));
+        }
+        const hex = (r << 16) | (g << 8) | 0;
+        arrow.mat.color.setHex(hex);
+
+        // Point in the facing direction
+        if (me.facing === 'up') arrow.group.rotation.y = Math.PI;
+        else if (me.facing === 'down') arrow.group.rotation.y = 0;
+        else if (me.facing === 'left') arrow.group.rotation.y = -Math.PI / 2;
+        else if (me.facing === 'right') arrow.group.rotation.y = Math.PI / 2;
+    } else {
+        arrow.group.visible = false;
     }
 }
 
@@ -2343,6 +3116,12 @@ document.addEventListener('keydown', (e) => {
             didChop = false;
         }
     }
+
+    if (e.key.toLowerCase() === 'e') {
+        if (!e.repeat) {
+            keys.e_pressed_time = Date.now();
+        }
+    }
 });
 document.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
@@ -2352,7 +3131,66 @@ document.addEventListener('keyup', (e) => {
             handleInteract();
         }
     }
+
+    if (e.key.toLowerCase() === 'e') {
+        let holdTime = Date.now() - (keys.e_pressed_time || Date.now());
+        handleThrowOrPickup(holdTime);
+    }
 });
+
+function handleThrowOrPickup(holdTime) {
+    if (!roomState || roomState.state !== 'playing') return;
+    const me = roomState.players[playerId];
+    if (!me) return;
+
+    // Reset hold time for safety
+    keys.e_pressed_time = null;
+
+    // Hide arrow
+    if (playerMeshes[playerId] && playerMeshes[playerId].throwArrow) {
+        playerMeshes[playerId].throwArrow.group.visible = false;
+    }
+
+    if (me.holding) {
+        // We are holding something -> Throw
+        // Max charge reached at 400ms instead of 800ms for fast throws
+        const power = Math.min(1.0, holdTime / 400);
+        // Mult from 0.8x up to 1.6x (slightly faster baseline, slightly more cap but shorter hold time)
+        const powerMult = power * 0.8 + 0.8;
+
+        socket.emit('throwItem', { power: powerMult });
+        if (ui && typeof ui.showNotification === 'function') {
+            ui.showNotification('Threw item!', 'info');
+        }
+    } else {
+        // Not holding -> Try to pick up from floor
+        // Find closest dropped item
+        let bestItemId = null;
+        let minDist = Infinity;
+        const reach = (gameConfig ? gameConfig.TILE_SIZE : 2) * 1.5;
+
+        // Player current pos
+        const px = me.x !== undefined ? me.x : me.gridX * (gameConfig ? gameConfig.TILE_SIZE : 2);
+        const pz = me.z !== undefined ? me.z : me.gridZ * (gameConfig ? gameConfig.TILE_SIZE : 2);
+
+        if (roomState.droppedItems) {
+            for (const [id, item] of Object.entries(roomState.droppedItems)) {
+                const dist = Math.sqrt(Math.pow(px - item.x, 2) + Math.pow(pz - item.z, 2));
+                if (dist <= reach && dist < minDist) {
+                    minDist = dist;
+                    bestItemId = id;
+                }
+            }
+        }
+
+        if (bestItemId) {
+            socket.emit('pickupItem', { itemId: bestItemId });
+        } else {
+            // Also call standard interact just in case they meant to grab from table
+            handleInteract();
+        }
+    }
+}
 
 function handleInteract() {
     if (!roomState || roomState.state !== 'playing') return;
@@ -2554,14 +3392,24 @@ function animate() {
                 me.z = me.gridZ * gameConfig.TILE_SIZE;
             }
 
-            const speed = 8.0; // Speed of movement
+            const speed = 16.0; // Speed of movement (Speedrun)
             let dx = 0, dz = 0;
 
-            // Continuous Input
+            // Continuous Input - Keyboard
             if (keys['w'] || keys['arrowup']) dz = -1;
             if (keys['s'] || keys['arrowdown']) dz = 1;
             if (keys['a'] || keys['arrowleft']) dx = -1;
             if (keys['d'] || keys['arrowright']) dx = 1;
+
+            // Virtual Joystick Input (Mobile)
+            if (window.virtualJoystick) {
+                const joystickDelta = window.virtualJoystick.getDelta();
+                if (joystickDelta.active) {
+                    // Joystick overrides keyboard on mobile
+                    dx = joystickDelta.x;
+                    dz = joystickDelta.y;
+                }
+            }
 
             // Normalize diagonal
             if (dx !== 0 && dz !== 0) {
@@ -2588,6 +3436,43 @@ function animate() {
                 // Try Z movement
                 if (!checkCollision(me.x, nextZ, gameConfig.TILE_SIZE) && !checkPlayerCollision(me.x, nextZ, playerId)) {
                     me.z = nextZ;
+                }
+
+                // Speedrun Smoke Effect (Spawn at the back of the player)
+                if (Math.random() < 0.3) {
+                    const pm = playerMeshes[playerId];
+                    if (pm && pm.group) {
+                        const smoke = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.15 + Math.random() * 0.1, 4, 4),
+                            new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.6 })
+                        );
+
+                        // Calculate position behind the player based on movement direction
+                        const backOffsetX = -dx * 0.6;
+                        const backOffsetZ = -dz * 0.6;
+
+                        smoke.position.set(
+                            me.x + backOffsetX + (Math.random() - 0.5) * 0.2,
+                            0.2,
+                            me.z + backOffsetZ + (Math.random() - 0.5) * 0.2
+                        );
+                        scene.add(smoke);
+
+                        const animateSmoke = () => {
+                            if (!smoke.material) return;
+                            smoke.position.y += 0.05;
+                            smoke.scale.setScalar(smoke.scale.x * 0.92);
+                            smoke.material.opacity -= 0.03;
+                            if (smoke.material.opacity > 0) {
+                                requestAnimationFrame(animateSmoke);
+                            } else {
+                                scene.remove(smoke);
+                                smoke.geometry.dispose();
+                                smoke.material.dispose();
+                            }
+                        };
+                        animateSmoke();
+                    }
                 }
 
                 // Emit updates (throttling could be added here if needed)
@@ -2991,8 +3876,11 @@ function updatePlayerHeldItem(playerId, holding) {
     heldGroup = new THREE.Group();
     heldGroup.name = 'heldGroup';
 
-    // Position comfortably in front of the player
-    heldGroup.position.set(0, 0.8, 0.5);
+    // Position comfortably in front/above the player (adjusted for giant size)
+    heldGroup.position.set(0, 1.2, 0.6);
+
+    // Scale up to EXACTLY MATCH the station's giant model sizes
+    heldGroup.scale.set(2.5, 2.5, 2.5);
 
     // Create hand-appropriate held item visuals
     if (holding.type === 'ingredient') {
@@ -3717,16 +4605,18 @@ function populateInGameGuide() {
     const container = document.getElementById('guide-content');
     if (!container) return;
 
+    const chatControls = roomState && roomState.mode !== 'single' ? `
+                <li><strong>ENTER</strong> - Chat</li>
+                <li><strong>1-4</strong> - Quick chat</li>
+                ` : '';
+
     container.innerHTML = `
         <div class="guide-section">
             <h4><span class="emoji-icon">🎮</span> Controls</h4>
             <ul>
                 <li><strong>WASD / Arrows</strong> - Move</li>
                 <li><strong>SPACE</strong> - Interact / Hold to process</li>
-                ${roomState && roomState.mode !== 'single' ? `
-                <li><strong>ENTER</strong> - Chat</li>
-                <li><strong>1-4</strong> - Quick chat</li>
-                ` : ''}
+                ${chatControls}
             </ul>
         </div>
 

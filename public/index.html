@@ -3,7 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Cooking Inamo - Multiplayer Kitchen Chaos!</title>
     <meta name="description"
         content="An Overcooked-style isometric 3D cooking battle game. Cook, chop, and serve dishes in a chaotic multiplayer kitchen!">
@@ -100,7 +103,7 @@
                 <div class="user-avatar">
                     <i class="bi bi-person-circle"></i>
                 </div>
-                <div class="user-details" onclick="openProfileCustomization()" title="Edit Profile">
+                <div class="user-details" onclick="openProfileCustomization('customize')" title="Edit Profile">
                     <span class="user-name" id="display-user-name">Chef</span>
                     <span class="user-status"><i class="bi bi-circle-fill status-icon"></i> Online <span
                             class="edit-hint">(Edit Profile)</span></span>
@@ -118,6 +121,7 @@
             <!-- MENU 1: MAIN MENU -->
             <div id="menu-main" class="lobby-menu active">
                 <div class="main-menu-layout">
+                    <!-- COLUMN 1: MENU BUTTONS -->
                     <div class="menu-buttons-column">
                         <button class="menu-btn compact" onclick="showMenu('single')">
                             <i class="bi bi-person-fill btn-icon"></i>
@@ -140,6 +144,13 @@
                                 <span class="btn-desc">Browse servers</span>
                             </div>
                         </button>
+                        <button class="menu-btn compact" onclick="showMenu('shop')">
+                            <i class="bi bi-shop btn-icon"></i>
+                            <div class="btn-text">
+                                <span class="btn-title">Shop</span>
+                                <span class="btn-desc">Buy items & upgrades</span>
+                            </div>
+                        </button>
                         <button class="menu-btn compact" onclick="showGuideBook()">
                             <i class="bi bi-info-circle-fill btn-icon"></i>
                             <div class="btn-text">
@@ -147,9 +158,10 @@
                                 <span class="btn-desc">Cooking guide & tips</span>
                             </div>
                         </button>
+                       
                     </div>
 
-                    <!-- FRIENDS PANEL (Right Side) -->
+                    <!-- COLUMN 2: FRIENDS PANEL -->
                     <div class="friends-panel" id="main-menu-friends-panel">
                         <div class="friends-panel-header">
                             <i class="bi bi-people-fill"></i> Friends
@@ -176,6 +188,30 @@
 
                         <div class="friends-panel-list" id="main-menu-friends-list">
                             <p class="friends-empty-msg">Login to see your friends</p>
+                        </div>
+                    </div>
+
+                    <!-- COLUMN 3: LEADERBOARD PANEL -->
+                    <div class="leaderboard-panel" id="main-menu-leaderboard-panel">
+                        <div class="leaderboard-panel-header">
+                            <i class="bi bi-trophy-fill"></i> Top Chefs
+                        </div>
+
+                        <!-- Category Filters -->
+                        <div class="leaderboard-panel-filters">
+                            <button class="lb-filter-btn active" data-category="score" onclick="switchMainLeaderboardCategory('score', this)">
+                                <i class="bi bi-star-fill"></i>
+                            </button>
+                            <button class="lb-filter-btn" data-category="dishes" onclick="switchMainLeaderboardCategory('dishes', this)">
+                                <i class="bi bi-egg-fried"></i>
+                            </button>
+                            <button class="lb-filter-btn" data-category="wins" onclick="switchMainLeaderboardCategory('wins', this)">
+                                <i class="bi bi-trophy"></i>
+                            </button>
+                        </div>
+
+                        <div class="leaderboard-panel-list" id="main-menu-leaderboard-list">
+                            <div class="loading-spinner-small">Loading...</div>
                         </div>
                     </div>
                 </div>
@@ -302,7 +338,37 @@
                 </div>
             </div>
 
-            <!-- MENU 5: FRIENDS -->
+            <!-- MENU 5: SHOP -->
+            <div id="menu-shop" class="lobby-menu hidden">
+                <h2 class="menu-title"><i class="bi bi-shop"></i> Shop</h2>
+                
+                <div class="shop-balance">
+                    <i class="bi bi-coin"></i>
+                    <span>Chef Hat Points: <strong id="shop-balance-amount">0</strong></span>
+                </div>
+
+                <div class="shop-categories">
+                    <button class="shop-category-btn active" onclick="switchShopCategory('avatars', this)">
+                        <i class="bi bi-person-circle"></i> Avatars
+                    </button>
+                    <button class="shop-category-btn" onclick="switchShopCategory('items', this)">
+                        <i class="bi bi-bag"></i> Items
+                    </button>
+                    <button class="shop-category-btn" onclick="switchShopCategory('boosts', this)">
+                        <i class="bi bi-lightning"></i> Boosts
+                    </button>
+                </div>
+
+                <div class="shop-items-container" id="shop-items-list">
+                    <p style="text-align:center; color:var(--text-dim); padding:40px;">Coming Soon! 🎮</p>
+                </div>
+
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i> Back</button>
+                </div>
+            </div>
+
+            <!-- MENU 6: FRIENDS -->
             <div id="menu-friends" class="lobby-menu hidden">
                 <h2 class="menu-title"><i class="bi bi-people-fill"></i> Friends</h2>
                 <div id="friends-guest-warning" class="friends-guest-warning hidden">
@@ -325,7 +391,33 @@
                 </div>
             </div>
 
-            <!-- MENU 6: GUIDE BOOK -->
+            <!-- MENU 6: LEADERBOARD -->
+            <div id="menu-leaderboard" class="lobby-menu hidden">
+                <h2 class="menu-title"><i class="bi bi-trophy-fill"></i> Leaderboard</h2>
+                
+                <div class="leaderboard-filters">
+                    <button class="filter-btn active" data-category="score" onclick="switchLeaderboardCategory('score', this)">
+                        <i class="bi bi-star-fill"></i> Total Score
+                    </button>
+                    <button class="filter-btn" data-category="dishes" onclick="switchLeaderboardCategory('dishes', this)">
+                        <i class="bi bi-egg-fried"></i> Dishes Cooked
+                    </button>
+                    <button class="filter-btn" data-category="wins" onclick="switchLeaderboardCategory('wins', this)">
+                        <i class="bi bi-trophy"></i> VS Wins
+                    </button>
+                </div>
+
+                <div class="leaderboard-container" id="leaderboard-list">
+                    <div class="loading-spinner">Loading leaderboard...</div>
+                </div>
+
+                <div class="menu-actions">
+                    <button class="btn-secondary" onclick="showMenu('main')"><i class="bi bi-arrow-left"></i> Back</button>
+                    <button class="btn-sm" onclick="refreshLeaderboard()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                </div>
+            </div>
+
+            <!-- MENU 7: GUIDE BOOK -->
             <div id="menu-guide" class="lobby-menu hidden">
                 <h2 class="menu-title"><i class="bi bi-info-circle-fill"></i> How to Play</h2>
                 <div class="guide-container" id="lobby-guide-content">
@@ -577,58 +669,193 @@
         </div>
     </div>
 
-    <!-- MODAL FOR PROFILE CUSTOMIZATION -->
+    <!-- MODAL FOR PLAYER PROFILE -->
     <div id="profile-modal" class="modal hidden">
-        <div class="modal-content profile-customize-card">
-            <h2 class="modal-title"><i class="bi bi-person-gear"></i> Profile Customization</h2>
+        <div class="modal-content profile-card-new">
+            <button class="modal-close-btn" onclick="closeProfileModal()"><i class="bi bi-x"></i></button>
 
-            <div class="profile-preview-section">
-                <div class="preview-avatar-container">
-                    <img id="profile-preview-img" src="/assets/avatars/chef1.jpg" alt="Preview">
-                </div>
-                <div class="preview-details">
-                    <span class="preview-label">PREVIEW</span>
-                    <h3 id="profile-preview-name">Chef</h3>
-                </div>
-            </div>
+            <div class="profile-layout">
+                <!-- Sidebar -->
+                <div class="profile-sidebar">
+                    <div class="profile-main-info">
+                        <div class="profile-avatar-container">
+                            <img id="profile-display-img" src="/assets/avatars/chef1.jpg" alt="Chef Avatar">
+                            <div class="level-indicator" id="profile-level-badge">Lv. 1</div>
+                        </div>
+                        <h2 id="profile-display-name">Chef Name</h2>
+                        <div class="profile-status">
+                            <i class="bi bi-circle-fill status-online"></i> Online
+                        </div>
+                        <div class="profile-id-badge" onclick="copyUserId()" title="Click to copy User ID">
+                            <span class="id-label">ID:</span>
+                            <span id="profile-display-id" class="id-value">#000000</span>
+                            <i class="bi bi-copy id-copy-icon"></i>
+                        </div>
+                    </div>
 
-            <div class="custom-section">
-                <label class="custom-label">CHANGE USERNAME</label>
-                <div class="input-with-icon">
-                    <i class="bi bi-pencil-square"></i>
-                    <input type="text" id="profile-new-username" placeholder="Enter new username..." maxlength="12"
-                        oninput="updateProfilePreview()">
-                </div>
-            </div>
+                    <!-- Progress Section -->
+                    <div class="xp-progress-section">
+                        <div class="xp-header">
+                            <span>Progress</span>
+                            <span id="profile-xp-text">0 / 1000 XP</span>
+                        </div>
+                        <div class="xp-bar-outline">
+                            <div class="xp-bar-fill" id="profile-xp-bar" style="width: 0%;"></div>
+                        </div>
+                    </div>
 
-            <div class="custom-section">
-                <label class="custom-label">CHOOSE AVATAR</label>
-                <div class="avatar-grid">
-                    <div class="avatar-option selected" data-key="chef_1" onclick="selectAvatar('chef_1', this)">
-                        <img src="/assets/avatars/chef1.jpg" alt="Avatar 1">
-                    </div>
-                    <div class="avatar-option" data-key="chef_2" onclick="selectAvatar('chef_2', this)">
-                        <img src="/assets/avatars/chef2.jpg" alt="Avatar 2">
-                    </div>
-                    <div class="avatar-option" data-key="chef_3" onclick="selectAvatar('chef_3', this)">
-                        <img src="/assets/avatars/chef3.jpg" alt="Avatar 3">
-                    </div>
-                    <div class="avatar-option" data-key="chef_4" onclick="selectAvatar('chef_4', this)">
-                        <img src="/assets/avatars/chef4.jpg" alt="Avatar 4">
-                    </div>
-                    <div class="avatar-option" data-key="chef_5" onclick="selectAvatar('chef_5', this)">
-                        <img src="/assets/avatars/chef5.jpg" alt="Avatar 5">
-                    </div>
-                    <div class="avatar-option" data-key="chef_6" onclick="selectAvatar('chef_6', this)">
-                        <img src="/assets/avatars/chef6.jpg" alt="Avatar 6">
+                    <!-- Navigation -->
+                    <div class="profile-nav-tabs">
+                        <button class="profile-tab-btn active" onclick="switchProfileTab('stats')" id="btn-tab-stats">
+                            <i class="bi bi-bar-chart-fill"></i> Stats
+                        </button>
+                        <button class="profile-tab-btn" onclick="switchProfileTab('history')" id="btn-tab-history">
+                            <i class="bi bi-clock-history"></i> History
+                        </button>
+                        <button class="profile-tab-btn" onclick="switchProfileTab('achievements')"
+                            id="btn-tab-achievements">
+                            <i class="bi bi-trophy-fill"></i> Awards
+                        </button>
+                        <button class="profile-tab-btn" onclick="switchProfileTab('customize')" id="btn-tab-customize">
+                            <i class="bi bi-person-gear"></i> Settings
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            <div class="modal-actions">
-                <button class="btn-secondary" onclick="closeProfileModal()">Cancel</button>
-                <button class="btn-primary" onclick="saveProfileChanges()"><i class="bi bi-check-all"></i> Save
-                    Changes</button>
+                <!-- Content Area -->
+                <div class="profile-content-area">
+                    <!-- STATS TAB -->
+                    <div id="profile-tab-stats" class="profile-tab-content active">
+                        <h3 class="tab-title"><i class="bi bi-bar-chart-fill"></i> Game Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-icon dish"><i class="bi bi-egg-fried"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-served">0</span>
+                                    <span class="stat-label">Served Dishes</span>
+                                </div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-icon games"><i class="bi bi-controller"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-played">0</span>
+                                    <span class="stat-label">Games Played</span>
+                                </div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-icon rating"><i class="bi bi-trophy-fill"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-wins">0</span>
+                                    <span class="stat-label">Total Wins</span>
+                                </div>
+                            </div>
+
+                            <div class="stat-item">
+                                <div class="stat-icon chopped"><img src="/assets/cutting-board.png"
+                                        style="width: 1em; height: 1em; filter: invert(1); opacity: 0.8;" alt="Chop">
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-chopped">0</span>
+                                    <span class="stat-label">Items Chopped</span>
+                                </div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-icon cooked">
+                                    <img src="/assets/hot-pot.png"
+                                        style="width: 1.2em; height: 1.2em; filter: invert(1); opacity: 0.8;"
+                                        alt="Cook">
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-cooked">0</span>
+                                    <span class="stat-label">Dishes Cooked</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- HISTORY TAB -->
+                    <div id="profile-tab-history" class="profile-tab-content">
+                        <h3 class="tab-title"><i class="bi bi-clock-history"></i> Match History</h3>
+                        <div class="history-list" id="profile-history-list">
+                            <p style="text-align:center; color:var(--text-dim); margin-top:20px;">No match history yet.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- ACHIEVEMENTS TAB -->
+                    <div id="profile-tab-achievements" class="profile-tab-content">
+                        <h3 class="tab-title"><i class="bi bi-trophy-fill"></i> Achievements</h3>
+                        <div class="achievements-grid" id="profile-achievements-grid">
+                            <!-- Example Achievement -->
+                            <div class="achievement-card">
+                                <i class="bi bi-award"></i>
+                                <span>First Serve</span>
+                            </div>
+                            <div class="achievement-card">
+                                <i class="bi bi-fire"></i>
+                                <span>On Fire</span>
+                            </div>
+                            <div class="achievement-card">
+                                <i class="bi bi-people"></i>
+                                <span>Team Player</span>
+                            </div>
+                            <div class="achievement-card">
+                                <i class="bi bi-lightning-charge"></i>
+                                <span>Fast Cook</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CUSTOMIZE TAB -->
+                    <div id="profile-tab-customize" class="profile-tab-content">
+                        <h3 class="tab-title"><i class="bi bi-person-gear"></i> Profile Settings</h3>
+
+                        <div class="customize-section">
+                            <label>CHANGE USERNAME</label>
+                            <div class="compact-input">
+                                <input type="text" id="profile-new-username" placeholder="Enter new username..."
+                                    maxlength="12" oninput="updateProfilePreview()">
+                            </div>
+                        </div>
+
+                        <div class="customize-section">
+                            <label>CHOOSE AVATAR</label>
+                            <div class="compact-avatar-grid">
+                                <div class="compact-avatar-option avatar-option selected" data-key="chef_1"
+                                    onclick="selectAvatar('chef_1', this)">
+                                    <img src="/assets/avatars/chef1.jpg" alt="Avatar 1">
+                                </div>
+                                <div class="compact-avatar-option avatar-option" data-key="chef_2"
+                                    onclick="selectAvatar('chef_2', this)">
+                                    <img src="/assets/avatars/chef2.jpg" alt="Avatar 2">
+                                </div>
+                                <div class="compact-avatar-option avatar-option" data-key="chef_3"
+                                    onclick="selectAvatar('chef_3', this)">
+                                    <img src="/assets/avatars/chef3.jpg" alt="Avatar 3">
+                                </div>
+                                <div class="compact-avatar-option avatar-option" data-key="chef_4"
+                                    onclick="selectAvatar('chef_4', this)">
+                                    <img src="/assets/avatars/chef4.jpg" alt="Avatar 4">
+                                </div>
+                                <div class="compact-avatar-option avatar-option" data-key="chef_5"
+                                    onclick="selectAvatar('chef_5', this)">
+                                    <img src="/assets/avatars/chef5.jpg" alt="Avatar 5">
+                                </div>
+                                <div class="compact-avatar-option avatar-option" data-key="chef_6"
+                                    onclick="selectAvatar('chef_6', this)">
+                                    <img src="/assets/avatars/chef6.jpg" alt="Avatar 6">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="save-profile-action">
+                            <button class="btn-primary" onclick="saveProfileChanges()">
+                                <i class="bi bi-check-all"></i> Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -643,6 +870,10 @@
         }
     }
     </script>
+    <!-- Mobile Orientation Handler (loads first) -->
+    <script src="/js/mobile-orientation.js"></script>
+    <!-- Virtual Joystick for Mobile Controls -->
+    <script src="/js/virtual-joystick.js"></script>
     <script type="module" src="/js/game.js"></script>
 </body>
 

@@ -169,8 +169,8 @@ export class KitchenRenderer {
                     const tGeo = new THREE.PlaneGeometry(this.ts * 0.98, this.ts * 0.98);
                     // Premium wood-like or dark pattern
                     const isEven = (x + z) % 2 === 0;
-                    const shade = theme === 'rustic' 
-                        ? (isEven ? 0xd2b48c : 0x8b4513) 
+                    const shade = theme === 'rustic'
+                        ? (isEven ? 0xd2b48c : 0x8b4513)
                         : (isEven ? 0x34495e : 0x2c3e50);
                     const tMat = new THREE.MeshStandardMaterial({
                         color: shade,
@@ -683,6 +683,53 @@ export class KitchenRenderer {
             handle.position.set(0, 0.09, sz * 1.55); // At front edge
             lid.add(handle);
 
+            // --- LARGE INGREDIENT ICON STICKER on freezer lid ---
+            const ing = this.config.INGREDIENTS[st.ingredient];
+            if (ing && ing.emoji) {
+                // Create a canvas for the emoji icon
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                
+                // White circular background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(128, 128, 110, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Border (metallic silver for freezer)
+                ctx.strokeStyle = '#C0C0C0';
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                
+                // Draw emoji
+                ctx.font = 'bold 140px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(ing.emoji, 128, 140);
+                
+                // Create texture and material
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                const stickerMat = new THREE.MeshStandardMaterial({ 
+                    map: texture,
+                    transparent: true,
+                    roughness: 0.3,
+                    metalness: 0.2
+                });
+                
+                // Create sticker mesh (circular)
+                const stickerSize = sz * 0.5;
+                const sticker = new THREE.Mesh(
+                    new THREE.CircleGeometry(stickerSize, 32),
+                    stickerMat
+                );
+                sticker.position.set(0, 0.085, sz * 0.8); // Center of lid
+                sticker.rotation.x = -Math.PI / 2;
+                lid.add(sticker);
+            }
+
             freezer.add(lid);
 
             // Interior light
@@ -704,67 +751,496 @@ export class KitchenRenderer {
 
         } else if (st.type === 'crate' && !isRiceCrate && !isDoughCrate && !isBreadCrate && !isEggCrate && !isCheeseCrate) {
             // ======================================
-            // GENERIC CRATE (wooden box): tomato, onion, mushroom, meat(raw), etc.
+            // WOODEN CRATE WITH TOP DOOR (Overcooked style) - HOLLOW WITH ANIMATION
             // ======================================
-            const tableGroup = new THREE.Group();
+            const crateGroup = new THREE.Group();
 
-            const counterMat = new THREE.MeshStandardMaterial({ color: crateCounterColor, roughness: 0.5, metalness: 0.15 });
-            const counterBlock = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.9, baseH, this.ts * 0.9), counterMat);
-            counterBlock.position.y = baseH / 2;
-            counterBlock.castShadow = true;
-            counterBlock.receiveShadow = true;
-            tableGroup.add(counterBlock);
+            // Ingredient-specific bright colors
+            const crateColors = {
+                tomato: { wood: 0xE74C3C, dark: 0xC0392B, plank: 0xD43D2F }, // Bright red
+                lettuce: { wood: 0x27AE60, dark: 0x1E8449, plank: 0x229954 }, // Bright green
+                onion: { wood: 0xF5DEB3, dark: 0xD2B48C, plank: 0xE3C9A0 }, // Wheat/beige
+                mushroom: { wood: 0xE8B4B8, dark: 0xD89CA0, plank: 0xE0A8AC }  // Light pink
+            };
+            
+            const colors = crateColors[st.ingredient] || { wood: 0xA0724A, dark: 0x7B5B3A, plank: 0x8B6F47 };
 
-            // Top surface — dark tile matching floor
-            const topSurfMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.35, metalness: 0.1 });
-            const topSurf = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.92, 0.05, this.ts * 0.92), topSurfMat);
-            topSurf.position.y = baseH + 0.025;
-            tableGroup.add(topSurf);
+            // Wooden crate materials with ingredient-specific colors
+            const woodMat = new THREE.MeshStandardMaterial({ color: colors.wood, roughness: 0.85 });
+            const darkWoodMat = new THREE.MeshStandardMaterial({ color: colors.dark, roughness: 0.9 });
+            const plankMat = new THREE.MeshStandardMaterial({ color: colors.plank, roughness: 0.9 });
+            
+            const crateW = this.ts * 0.85;
+            const crateH = 0.9; // Match counter height
+            const crateD = this.ts * 0.85;
+            const plankThickness = 0.04;
 
-            // --- WOODEN BOX / CRATE on counter ---
-            const woodMat = new THREE.MeshStandardMaterial({ color: 0xA0724A, roughness: 0.85 });
-            const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x7B5B3A, roughness: 0.9 });
-            const boxSz = this.ts * 0.36;
-            const boxH = 0.3;
+            // Helper function to create walls
+            const createWall = (width, height, depth, x, y, z, material = woodMat) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+                wall.position.set(x, y, z);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                return wall;
+            };
 
-            const plankMat = [woodMat, darkWoodMat];
-            const sides = [
-                { pos: [0, baseH + boxH / 2 + 0.05, boxSz], rot: 0 },
-                { pos: [0, baseH + boxH / 2 + 0.05, -boxSz], rot: 0 },
-                { pos: [boxSz, baseH + boxH / 2 + 0.05, 0], rot: Math.PI / 2 },
-                { pos: [-boxSz, baseH + boxH / 2 + 0.05, 0], rot: Math.PI / 2 }
-            ];
-            sides.forEach((side, idx) => {
-                for (let p = 0; p < 2; p++) {
-                    const plank = new THREE.Mesh(
-                        new THREE.BoxGeometry(boxSz * 2, boxH / 2 - 0.01, 0.03),
-                        plankMat[(idx + p) % 2]
-                    );
-                    plank.position.set(side.pos[0], side.pos[1] + (p - 0.5) * (boxH / 2), side.pos[2]);
-                    plank.rotation.y = side.rot;
-                    plank.castShadow = true;
-                    tableGroup.add(plank);
-                }
-            });
+            // --- HOLLOW CRATE BODY (NO TOP - open from above) ---
+            // Bottom
+            crateGroup.add(createWall(crateW, plankThickness, crateD, 0, plankThickness / 2, 0, darkWoodMat));
 
-            const boxBottom = new THREE.Mesh(new THREE.BoxGeometry(boxSz * 2, 0.025, boxSz * 2), darkWoodMat);
-            boxBottom.position.y = baseH + 0.06;
-            tableGroup.add(boxBottom);
+            // Walls (hollow construction)
+            const wallH = crateH - plankThickness;
+            crateGroup.add(createWall(crateW, wallH, plankThickness, 0, crateH / 2, crateD / 2 - plankThickness / 2, woodMat)); // front
+            crateGroup.add(createWall(crateW, wallH, plankThickness, 0, crateH / 2, -crateD / 2 + plankThickness / 2, woodMat)); // back
+            crateGroup.add(createWall(plankThickness, wallH, crateD - plankThickness * 2, -crateW / 2 + plankThickness / 2, crateH / 2, 0, woodMat)); // left
+            crateGroup.add(createWall(plankThickness, wallH, crateD - plankThickness * 2, crateW / 2 - plankThickness / 2, crateH / 2, 0, woodMat)); // right
 
-            const postGeo = new THREE.BoxGeometry(0.04, boxH + 0.02, 0.04);
+            // Decorative slats on exterior (vertical planks with gaps)
+            const slatsPerSide = 5;
+            const slotWidth = crateW / slatsPerSide;
+            
+            // Front and back decorative slats
+            for (let i = 0; i < slatsPerSide; i++) {
+                // Front
+                const frontSlat = new THREE.Mesh(
+                    new THREE.BoxGeometry(slotWidth * 0.65, wallH * 0.9, plankThickness * 0.3),
+                    i % 2 === 0 ? plankMat : darkWoodMat
+                );
+                frontSlat.position.set(
+                    -crateW / 2 + slotWidth * (i + 0.5),
+                    crateH / 2,
+                    crateD / 2 + plankThickness * 0.15
+                );
+                frontSlat.castShadow = true;
+                crateGroup.add(frontSlat);
+
+                // Back
+                const backSlat = frontSlat.clone();
+                backSlat.position.z = -crateD / 2 - plankThickness * 0.15;
+                crateGroup.add(backSlat);
+            }
+
+            // Left and right decorative slats
+            for (let i = 0; i < slatsPerSide; i++) {
+                // Left
+                const leftSlat = new THREE.Mesh(
+                    new THREE.BoxGeometry(plankThickness * 0.3, wallH * 0.9, slotWidth * 0.65),
+                    i % 2 === 0 ? plankMat : darkWoodMat
+                );
+                leftSlat.position.set(
+                    -crateW / 2 - plankThickness * 0.15,
+                    crateH / 2,
+                    -crateD / 2 + slotWidth * (i + 0.5)
+                );
+                leftSlat.castShadow = true;
+                crateGroup.add(leftSlat);
+
+                // Right
+                const rightSlat = leftSlat.clone();
+                rightSlat.position.x = crateW / 2 + plankThickness * 0.15;
+                crateGroup.add(rightSlat);
+            }
+
+            // Corner posts for structure
+            const postGeo = new THREE.BoxGeometry(plankThickness * 1.8, crateH, plankThickness * 1.8);
             [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([cx, cz]) => {
                 const post = new THREE.Mesh(postGeo, darkWoodMat);
-                post.position.set(cx * boxSz, baseH + boxH / 2 + 0.05, cz * boxSz);
+                post.position.set(
+                    cx * (crateW / 2 - plankThickness * 0.9),
+                    crateH / 2,
+                    cz * (crateD / 2 - plankThickness * 0.9)
+                );
                 post.castShadow = true;
-                tableGroup.add(post);
+                crateGroup.add(post);
             });
 
-            mesh = tableGroup;
-            group.add(tableGroup);
+            // --- INTERIOR LINING (lighter wood inside) ---
+            const interiorMat = new THREE.MeshStandardMaterial({ color: 0xD4A574, roughness: 0.7 });
+            const interiorH = wallH * 0.85;
+            crateGroup.add(createWall(crateW * 0.92, 0.01, crateD * 0.92, 0, plankThickness + 0.005, 0, interiorMat)); // floor
+            crateGroup.add(createWall(crateW * 0.88, interiorH, 0.02, 0, crateH * 0.55, -crateD * 0.44, interiorMat)); // back inner
+            crateGroup.add(createWall(crateW * 0.88, interiorH, 0.02, 0, crateH * 0.55, crateD * 0.44, interiorMat)); // front inner
+            crateGroup.add(createWall(0.02, interiorH, crateD * 0.88, -crateW * 0.44, crateH * 0.55, 0, interiorMat)); // left inner
+            crateGroup.add(createWall(0.02, interiorH, crateD * 0.88, crateW * 0.44, crateH * 0.55, 0, interiorMat)); // right inner
+
+            // --- TOP DOOR (hinged at BACK edge, pivots forward) ---
+            const doorGroup = new THREE.Group();
+            doorGroup.name = 'crateDoor';
+            doorGroup.position.set(0, crateH, -crateD * 0.42); // Pivot at back edge
+            
+            // Door frame (thick border)
+            const frameThickness = 0.08;
+            doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, 0, darkWoodMat)); // back (at pivot)
+            doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, crateD * 0.84, darkWoodMat)); // front
+            doorGroup.add(createWall(plankThickness * 2, frameThickness, crateD * 0.84, -crateW / 2 + plankThickness, frameThickness / 2, crateD * 0.42, darkWoodMat)); // left
+            doorGroup.add(createWall(plankThickness * 2, frameThickness, crateD * 0.84, crateW / 2 - plankThickness, frameThickness / 2, crateD * 0.42, darkWoodMat)); // right
+
+            // Door planks (horizontal slats)
+            const doorPlanks = 5;
+            for (let i = 0; i < doorPlanks; i++) {
+                const plank = new THREE.Mesh(
+                    new THREE.BoxGeometry(crateW * 0.88, frameThickness * 0.7, crateD * 0.15),
+                    i % 2 === 0 ? woodMat : plankMat
+                );
+                plank.position.set(0, frameThickness / 2, crateD * 0.1 + (crateD * 0.64 / (doorPlanks - 1)) * i);
+                plank.castShadow = true;
+                doorGroup.add(plank);
+            }
+
+            // Metal hinges (at back)
+            const hingeMat = new THREE.MeshStandardMaterial({ 
+                color: 0x444444, 
+                roughness: 0.4, 
+                metalness: 0.8 
+            });
+            [-0.28, 0.28].forEach(xPos => {
+                const hinge = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.1, frameThickness * 1.3, 0.08),
+                    hingeMat
+                );
+                hinge.position.set(xPos * crateW, frameThickness / 2, -plankThickness);
+                hinge.castShadow = true;
+                doorGroup.add(hinge);
+            });
+
+            // Handle (metal bar at front)
+            const handleMat = new THREE.MeshStandardMaterial({ 
+                color: 0x666666, 
+                metalness: 0.85, 
+                roughness: 0.15 
+            });
+            const handle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, crateW * 0.6, 12),
+                handleMat
+            );
+            handle.rotation.z = Math.PI / 2;
+            handle.position.set(0, frameThickness + 0.03, crateD * 0.82);
+            handle.castShadow = true;
+            doorGroup.add(handle);
+
+            // --- LARGE INGREDIENT ICON STICKER on door ---
+            const ing = this.config.INGREDIENTS[st.ingredient];
+            if (ing && ing.emoji) {
+                // Create a canvas for the emoji icon
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                
+                // White circular background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(128, 128, 110, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Border
+                ctx.strokeStyle = '#8B6F47';
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                
+                // Draw emoji
+                ctx.font = 'bold 140px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(ing.emoji, 128, 140);
+                
+                // Create texture and material
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                const stickerMat = new THREE.MeshStandardMaterial({ 
+                    map: texture,
+                    transparent: true,
+                    roughness: 0.6,
+                    metalness: 0.1
+                });
+                
+                // Create sticker mesh (circular)
+                const stickerSize = crateW * 0.35;
+                const sticker = new THREE.Mesh(
+                    new THREE.CircleGeometry(stickerSize, 32),
+                    stickerMat
+                );
+                sticker.position.set(0, frameThickness + 0.01, crateD * 0.45);
+                sticker.rotation.x = -Math.PI / 2;
+                doorGroup.add(sticker);
+            }
+
+            crateGroup.add(doorGroup);
+
+            // Interior light (subtle glow when open)
+            const ingredientColor = {
+                tomato: 0xFF6347,
+                lettuce: 0x90EE90,
+                onion: 0xF5DEB3,
+                mushroom: 0xD2B48C
+            }[st.ingredient] || 0xFFFFFF;
+            
+            const light = new THREE.PointLight(ingredientColor, 0, 2);
+            light.position.set(0, crateH * 0.8, 0);
+            crateGroup.add(light);
+
+            mesh = crateGroup;
+            group.add(crateGroup);
             top = null;
 
-        } else if (isCheeseCrate) {
-            // --- CHEESE: Giant wedge of cheese on dark tile counter ---
+            // Store for animation (same pattern as freezer)
+            this.stationEffects[st.id] = {
+                door: doorGroup,
+                light: light,
+                doorOpen: false,
+                doorAngle: 0
+            };
+
+        } else if (isCheeseCrate || isRiceCrate || isDoughCrate || isBreadCrate || isEggCrate) {
+            // ======================================
+            // WOODEN CRATE WITH TOP DOOR (for all special ingredients)
+            // ======================================
+            const crateGroup = new THREE.Group();
+
+            // Ingredient-specific wood colors (bright and distinct)
+            const crateColors = {
+                rice: { wood: 0xFFFAF0, dark: 0xF5F5DC, plank: 0xFFF8E7 }, // Bright white/cream
+                dough: { wood: 0xF5DEB3, dark: 0xD2B48C, plank: 0xE3C9A0 }, // Wheat
+                bread: { wood: 0xD2691E, dark: 0xA0522D, plank: 0xB8621F }, // Chocolate/brown
+                egg: { wood: 0xFFFACD, dark: 0xFFEFD5, plank: 0xFFF5E1 }, // Lemon chiffon
+                cheese: { wood: 0xFFD700, dark: 0xDAA520, plank: 0xF0C040 }  // Gold/yellow
+            };
+            
+            const colors = crateColors[st.ingredient] || crateColors.tomato;
+
+            // Wooden crate materials with ingredient-specific colors
+            const woodMat = new THREE.MeshStandardMaterial({ color: colors.wood, roughness: 0.85 });
+            const darkWoodMat = new THREE.MeshStandardMaterial({ color: colors.dark, roughness: 0.9 });
+            const plankMat = new THREE.MeshStandardMaterial({ color: colors.plank, roughness: 0.9 });
+            
+            const crateW = this.ts * 0.85;
+            const crateH = 0.9; // Match counter height
+            const crateD = this.ts * 0.85;
+            const plankThickness = 0.04;
+
+            // Helper function to create walls
+            const createWall = (width, height, depth, x, y, z, material = woodMat) => {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+                wall.position.set(x, y, z);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                return wall;
+            };
+
+            // --- HOLLOW CRATE BODY (NO TOP - open from above) ---
+            // Bottom
+            crateGroup.add(createWall(crateW, plankThickness, crateD, 0, plankThickness / 2, 0, darkWoodMat));
+
+            // Walls (hollow construction)
+            const wallH = crateH - plankThickness;
+            crateGroup.add(createWall(crateW, wallH, plankThickness, 0, crateH / 2, crateD / 2 - plankThickness / 2, woodMat)); // front
+            crateGroup.add(createWall(crateW, wallH, plankThickness, 0, crateH / 2, -crateD / 2 + plankThickness / 2, woodMat)); // back
+            crateGroup.add(createWall(plankThickness, wallH, crateD - plankThickness * 2, -crateW / 2 + plankThickness / 2, crateH / 2, 0, woodMat)); // left
+            crateGroup.add(createWall(plankThickness, wallH, crateD - plankThickness * 2, crateW / 2 - plankThickness / 2, crateH / 2, 0, woodMat)); // right
+
+            // Decorative slats on exterior (vertical planks with gaps)
+            const slatsPerSide = 5;
+            const slotWidth = crateW / slatsPerSide;
+            
+            // Front and back decorative slats
+            for (let i = 0; i < slatsPerSide; i++) {
+                // Front
+                const frontSlat = new THREE.Mesh(
+                    new THREE.BoxGeometry(slotWidth * 0.65, wallH * 0.9, plankThickness * 0.3),
+                    i % 2 === 0 ? plankMat : darkWoodMat
+                );
+                frontSlat.position.set(
+                    -crateW / 2 + slotWidth * (i + 0.5),
+                    crateH / 2,
+                    crateD / 2 + plankThickness * 0.15
+                );
+                frontSlat.castShadow = true;
+                crateGroup.add(frontSlat);
+
+                // Back
+                const backSlat = frontSlat.clone();
+                backSlat.position.z = -crateD / 2 - plankThickness * 0.15;
+                crateGroup.add(backSlat);
+            }
+
+            // Left and right decorative slats
+            for (let i = 0; i < slatsPerSide; i++) {
+                // Left
+                const leftSlat = new THREE.Mesh(
+                    new THREE.BoxGeometry(plankThickness * 0.3, wallH * 0.9, slotWidth * 0.65),
+                    i % 2 === 0 ? plankMat : darkWoodMat
+                );
+                leftSlat.position.set(
+                    -crateW / 2 - plankThickness * 0.15,
+                    crateH / 2,
+                    -crateD / 2 + slotWidth * (i + 0.5)
+                );
+                leftSlat.castShadow = true;
+                crateGroup.add(leftSlat);
+
+                // Right
+                const rightSlat = leftSlat.clone();
+                rightSlat.position.x = crateW / 2 + plankThickness * 0.15;
+                crateGroup.add(rightSlat);
+            }
+
+            // Corner posts for structure
+            const postGeo = new THREE.BoxGeometry(plankThickness * 1.8, crateH, plankThickness * 1.8);
+            [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([cx, cz]) => {
+                const post = new THREE.Mesh(postGeo, darkWoodMat);
+                post.position.set(
+                    cx * (crateW / 2 - plankThickness * 0.9),
+                    crateH / 2,
+                    cz * (crateD / 2 - plankThickness * 0.9)
+                );
+                post.castShadow = true;
+                crateGroup.add(post);
+            });
+
+            // --- INTERIOR LINING (lighter wood inside) ---
+            const interiorMat = new THREE.MeshStandardMaterial({ color: 0xD4A574, roughness: 0.7 });
+            const interiorH = wallH * 0.85;
+            crateGroup.add(createWall(crateW * 0.92, 0.01, crateD * 0.92, 0, plankThickness + 0.005, 0, interiorMat)); // floor
+            crateGroup.add(createWall(crateW * 0.88, interiorH, 0.02, 0, crateH * 0.55, -crateD * 0.44, interiorMat)); // back inner
+            crateGroup.add(createWall(crateW * 0.88, interiorH, 0.02, 0, crateH * 0.55, crateD * 0.44, interiorMat)); // front inner
+            crateGroup.add(createWall(0.02, interiorH, crateD * 0.88, -crateW * 0.44, crateH * 0.55, 0, interiorMat)); // left inner
+            crateGroup.add(createWall(0.02, interiorH, crateD * 0.88, crateW * 0.44, crateH * 0.55, 0, interiorMat)); // right inner
+
+            // --- TOP DOOR (hinged at BACK edge, pivots forward) ---
+            const doorGroup = new THREE.Group();
+            doorGroup.name = 'crateDoor';
+            doorGroup.position.set(0, crateH, -crateD * 0.42); // Pivot at back edge
+            
+            // Door frame (thick border)
+            const frameThickness = 0.08;
+            doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, 0, darkWoodMat)); // back (at pivot)
+            doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, crateD * 0.84, darkWoodMat)); // front
+            doorGroup.add(createWall(plankThickness * 2, frameThickness, crateD * 0.84, -crateW / 2 + plankThickness, frameThickness / 2, crateD * 0.42, darkWoodMat)); // left
+            doorGroup.add(createWall(plankThickness * 2, frameThickness, crateD * 0.84, crateW / 2 - plankThickness, frameThickness / 2, crateD * 0.42, darkWoodMat)); // right
+
+            // Door planks (horizontal slats)
+            const doorPlanks = 5;
+            for (let i = 0; i < doorPlanks; i++) {
+                const plank = new THREE.Mesh(
+                    new THREE.BoxGeometry(crateW * 0.88, frameThickness * 0.7, crateD * 0.15),
+                    i % 2 === 0 ? woodMat : plankMat
+                );
+                plank.position.set(0, frameThickness / 2, crateD * 0.1 + (crateD * 0.64 / (doorPlanks - 1)) * i);
+                plank.castShadow = true;
+                doorGroup.add(plank);
+            }
+
+            // Metal hinges (at back)
+            const hingeMat = new THREE.MeshStandardMaterial({ 
+                color: 0x444444, 
+                roughness: 0.4, 
+                metalness: 0.8 
+            });
+            [-0.28, 0.28].forEach(xPos => {
+                const hinge = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.1, frameThickness * 1.3, 0.08),
+                    hingeMat
+                );
+                hinge.position.set(xPos * crateW, frameThickness / 2, -plankThickness);
+                hinge.castShadow = true;
+                doorGroup.add(hinge);
+            });
+
+            // Handle (metal bar at front)
+            const handleMat = new THREE.MeshStandardMaterial({ 
+                color: 0x666666, 
+                metalness: 0.85, 
+                roughness: 0.15 
+            });
+            const handle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, crateW * 0.6, 12),
+                handleMat
+            );
+            handle.rotation.z = Math.PI / 2;
+            handle.position.set(0, frameThickness + 0.03, crateD * 0.82);
+            handle.castShadow = true;
+            doorGroup.add(handle);
+
+            // --- LARGE INGREDIENT ICON STICKER on door ---
+            const ing = this.config.INGREDIENTS[st.ingredient];
+            if (ing && ing.emoji) {
+                // Create a canvas for the emoji icon
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                
+                // White circular background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(128, 128, 110, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Border
+                ctx.strokeStyle = '#8B6F47';
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                
+                // Draw emoji
+                ctx.font = 'bold 140px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(ing.emoji, 128, 140);
+                
+                // Create texture and material
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                const stickerMat = new THREE.MeshStandardMaterial({ 
+                    map: texture,
+                    transparent: true,
+                    roughness: 0.6,
+                    metalness: 0.1
+                });
+                
+                // Create sticker mesh (circular)
+                const stickerSize = crateW * 0.35;
+                const sticker = new THREE.Mesh(
+                    new THREE.CircleGeometry(stickerSize, 32),
+                    stickerMat
+                );
+                sticker.position.set(0, frameThickness + 0.01, crateD * 0.45);
+                sticker.rotation.x = -Math.PI / 2;
+                doorGroup.add(sticker);
+            }
+
+            crateGroup.add(doorGroup);
+
+            // Interior light (subtle glow when open)
+            const ingredientColor = {
+                tomato: 0xFF6347,
+                lettuce: 0x90EE90,
+                onion: 0xF5DEB3,
+                mushroom: 0xD2B48C,
+                rice: 0xFFF8E7,
+                dough: 0xF5DEB3,
+                bread: 0xC8860A,
+                egg: 0xFFF8DC,
+                cheese: 0xFFD700
+            }[st.ingredient] || 0xFFFFFF;
+            
+            const light = new THREE.PointLight(ingredientColor, 0, 2);
+            light.position.set(0, crateH * 0.8, 0);
+            crateGroup.add(light);
+
+            mesh = crateGroup;
+            group.add(crateGroup);
+            top = null;
+
+            // Store for animation (same pattern as freezer)
+            this.stationEffects[st.id] = {
+                door: doorGroup,
+                light: light,
+                doorOpen: false,
+                doorAngle: 0
+            };
+
+        } else if (false && isCheeseCrate) {
+            // OLD CHEESE DESIGN - DISABLED
             const cheeseGroup = new THREE.Group();
             const counterMat = new THREE.MeshStandardMaterial({ color: crateCounterColor, roughness: 0.5, metalness: 0.15 });
             const counterBlock = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.9, baseH, this.ts * 0.9), counterMat);
@@ -811,12 +1287,47 @@ export class KitchenRenderer {
                 cheeseGroup.add(hole);
             });
 
+            // --- CHEESE ICON STICKER on front ---
+            const ing = this.config.INGREDIENTS[st.ingredient];
+            if (ing && ing.emoji) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.beginPath();
+                ctx.arc(128, 128, 110, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#8B6F47';
+                ctx.lineWidth = 8;
+                ctx.stroke();
+                ctx.font = 'bold 140px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(ing.emoji, 128, 140);
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                const stickerMat = new THREE.MeshStandardMaterial({ 
+                    map: texture,
+                    transparent: true,
+                    roughness: 0.6,
+                    metalness: 0.1
+                });
+                const stickerSize = this.ts * 0.25;
+                const sticker = new THREE.Mesh(
+                    new THREE.CircleGeometry(stickerSize, 32),
+                    stickerMat
+                );
+                sticker.position.set(0, baseH * 0.5, this.ts * 0.46);
+                cheeseGroup.add(sticker);
+            }
+
             mesh = cheeseGroup;
             group.add(cheeseGroup);
             top = null;
 
-        } else if (isRiceCrate) {
-            // --- RICE: Big standalone burlap sack, no table ---
+        } else if (false && isRiceCrate) {
+            // OLD RICE DESIGN - DISABLED
             const riceGroup = new THREE.Group();
             const sackMat = new THREE.MeshStandardMaterial({ color: 0xC2A878, roughness: 0.95 });
             const sackDarkMat = new THREE.MeshStandardMaterial({ color: 0x967B55, roughness: 0.95 });
@@ -867,8 +1378,8 @@ export class KitchenRenderer {
             group.add(riceGroup);
             top = null;
 
-        } else if (isDoughCrate) {
-            // --- DOUGH: Table with ingredient-colored counter + dough blob ---
+        } else if (false && isDoughCrate) {
+            // OLD DOUGH DESIGN - DISABLED
             const doughGroup = new THREE.Group();
             const doughCounterMat = new THREE.MeshStandardMaterial({ color: crateCounterColor, roughness: 0.5, metalness: 0.15 });
 
@@ -904,8 +1415,8 @@ export class KitchenRenderer {
             group.add(doughGroup);
             top = null;
 
-        } else if (isBreadCrate) {
-            // --- BREAD: Wooden table + large loaf of bread ---
+        } else if (false && isBreadCrate) {
+            // OLD BREAD DESIGN - DISABLED
             const breadGroup = new THREE.Group();
             const breadCounterMat = new THREE.MeshStandardMaterial({ color: crateCounterColor, roughness: 0.5, metalness: 0.15 });
 
@@ -951,8 +1462,8 @@ export class KitchenRenderer {
             group.add(breadGroup);
             top = null;
 
-        } else if (isEggCrate) {
-            // --- EGG: Counter with realistic large egg carton ---
+        } else if (false && isEggCrate) {
+            // OLD EGG DESIGN - DISABLED
             const eggGroup = new THREE.Group();
             const cardboardMat = new THREE.MeshStandardMaterial({ color: 0xC8A870, roughness: 0.95 });
             const cardDarkMat = new THREE.MeshStandardMaterial({ color: 0xA88850, roughness: 0.95 });
@@ -1464,8 +1975,449 @@ export class KitchenRenderer {
                         ingGroup.add(cube);
                     }
 
-                } else if (!isRiceCrate) {
-                    // --- WOODEN BOX CONTENTS: BIG pile of produce filling the box ---
+                } else if (isRiceCrate) {
+                    // --- RICE CRATE CONTENTS: Sand-like white powder filling the box ---
+                    const riceMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xFFF8E7, 
+                        roughness: 0.95,
+                        metalness: 0.0
+                    });
+                    
+                    // Create a solid base layer (sand-like surface)
+                    const boxSz = this.ts * 0.35;
+                    const fillHeight = 0.42; // Fill most of the crate
+                    
+                    // Main rice mass (solid block with rounded top)
+                    const riceBase = new THREE.Mesh(
+                        new THREE.BoxGeometry(boxSz * 1.6, fillHeight, boxSz * 1.6),
+                        riceMat
+                    );
+                    riceBase.position.y = fillHeight / 2 + 0.05;
+                    ingGroup.add(riceBase);
+                    
+                    // Rounded top surface (mound effect)
+                    const moundTop = new THREE.Mesh(
+                        new THREE.SphereGeometry(boxSz * 0.9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                        riceMat
+                    );
+                    moundTop.position.y = fillHeight + 0.05;
+                    moundTop.scale.y = 0.3; // Flatten it
+                    ingGroup.add(moundTop);
+                    
+                    // Add texture with many tiny grains on surface
+                    const grainCount = 300;
+                    for (let g = 0; g < grainCount; g++) {
+                        const grain = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.006, 3, 3),
+                            riceMat
+                        );
+                        grain.scale.set(0.5, 1.2, 0.5);
+                        
+                        // Scatter on top surface
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = Math.random() * boxSz * 0.8;
+                        const x = Math.cos(angle) * radius;
+                        const z = Math.sin(angle) * radius;
+                        
+                        // Height follows the mound curve
+                        const distFromCenter = Math.sqrt(x * x + z * z);
+                        const moundHeight = Math.max(0, 1 - (distFromCenter / (boxSz * 0.8))) * 0.08;
+                        const y = fillHeight + 0.05 + moundHeight + (Math.random() * 0.015);
+                        
+                        grain.position.set(x, y, z);
+                        grain.rotation.set(
+                            Math.random() * Math.PI,
+                            Math.random() * Math.PI,
+                            Math.random() * Math.PI
+                        );
+                        
+                        ingGroup.add(grain);
+                    }
+                    
+                    // Add small clumps for texture variation
+                    for (let c = 0; c < 15; c++) {
+                        const clump = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.018, 5, 5),
+                            riceMat
+                        );
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = Math.random() * boxSz * 0.75;
+                        const x = Math.cos(angle) * radius;
+                        const z = Math.sin(angle) * radius;
+                        const distFromCenter = Math.sqrt(x * x + z * z);
+                        const moundHeight = Math.max(0, 1 - (distFromCenter / (boxSz * 0.75))) * 0.08;
+                        
+                        clump.position.set(
+                            x,
+                            fillHeight + 0.05 + moundHeight + (Math.random() * 0.02),
+                            z
+                        );
+                        clump.scale.set(1, 0.5, 1);
+                        ingGroup.add(clump);
+                    }
+
+                } else if (isDoughCrate) {
+                    // --- DOUGH CRATE CONTENTS: Stacked layers of dough balls ---
+                    const doughMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xF5DEB3, 
+                        roughness: 0.95,
+                        metalness: 0.0
+                    });
+                    
+                    const flourMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xFFFFF0, 
+                        roughness: 1.0,
+                        transparent: true,
+                        opacity: 0.6
+                    });
+                    
+                    const boxSz = this.ts * 0.35;
+                    
+                    // Create stacked layers of dough balls
+                    const layers = 3;
+                    const ballsPerLayer = 4;
+                    
+                    for (let layer = 0; layer < layers; layer++) {
+                        const layerY = 0.12 + layer * 0.14;
+                        
+                        for (let b = 0; b < ballsPerLayer; b++) {
+                            // Dough ball
+                            const doughBall = new THREE.Mesh(
+                                new THREE.SphereGeometry(0.11 + Math.random() * 0.02, 12, 10),
+                                doughMat
+                            );
+                            doughBall.scale.set(1, 0.7, 1); // Slightly flattened
+                            
+                            // Arrange in a pattern
+                            const angle = (b / ballsPerLayer) * Math.PI * 2 + (layer * 0.5);
+                            const radius = layer === 0 ? 0.15 : (layer === 1 ? 0.1 : 0.05);
+                            
+                            doughBall.position.set(
+                                Math.cos(angle) * radius,
+                                layerY,
+                                Math.sin(angle) * radius
+                            );
+                            
+                            ingGroup.add(doughBall);
+                            
+                            // Add flour dusting on each ball
+                            for (let f = 0; f < 3; f++) {
+                                const flour = new THREE.Mesh(
+                                    new THREE.SphereGeometry(0.015, 5, 5),
+                                    flourMat
+                                );
+                                flour.scale.set(1.5, 0.3, 1.5);
+                                flour.position.set(
+                                    doughBall.position.x + (Math.random() - 0.5) * 0.08,
+                                    layerY + 0.08,
+                                    doughBall.position.z + (Math.random() - 0.5) * 0.08
+                                );
+                                ingGroup.add(flour);
+                            }
+                        }
+                    }
+                    
+                    // Add one large dough ball on top
+                    const topDough = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.13, 14, 12),
+                        doughMat
+                    );
+                    topDough.scale.set(1, 0.65, 1);
+                    topDough.position.y = 0.12 + layers * 0.14;
+                    ingGroup.add(topDough);
+                    
+                    // Extra flour on top
+                    for (let f = 0; f < 5; f++) {
+                        const flour = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.018, 5, 5),
+                            flourMat
+                        );
+                        flour.scale.set(1.8, 0.25, 1.8);
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = Math.random() * 0.12;
+                        flour.position.set(
+                            Math.cos(angle) * radius,
+                            0.12 + layers * 0.14 + 0.09,
+                            Math.sin(angle) * radius
+                        );
+                        ingGroup.add(flour);
+                    }
+
+                } else if (isBreadCrate) {
+                    // --- BREAD CRATE CONTENTS: Scattered burger buns ---
+                    const breadMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xC8860A, 
+                        roughness: 0.85,
+                        metalness: 0.0
+                    });
+                    
+                    const topMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xA0690A, 
+                        roughness: 0.9
+                    });
+                    
+                    const seedMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xFFFACD,
+                        roughness: 0.8
+                    });
+                    
+                    const boxSz = this.ts * 0.35;
+                    
+                    // Create scattered burger buns filling the crate
+                    const bunCount = 12;
+                    
+                    for (let b = 0; b < bunCount; b++) {
+                        const bunGroup = new THREE.Group();
+                        
+                        // Bun body (round, slightly flattened)
+                        const bun = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.09, 16, 12),
+                            breadMat
+                        );
+                        bun.scale.set(1, 0.6, 1);
+                        bunGroup.add(bun);
+                        
+                        // Darker top crust
+                        const top = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.088, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                            topMat
+                        );
+                        top.position.y = 0.02;
+                        top.scale.y = 0.5;
+                        bunGroup.add(top);
+                        
+                        // Sesame seeds on top
+                        const seedCount = 6 + Math.floor(Math.random() * 4);
+                        for (let s = 0; s < seedCount; s++) {
+                            const seed = new THREE.Mesh(
+                                new THREE.SphereGeometry(0.004, 4, 4),
+                                seedMat
+                            );
+                            const angle = Math.random() * Math.PI * 2;
+                            const radius = Math.random() * 0.06;
+                            seed.position.set(
+                                Math.cos(angle) * radius,
+                                0.055,
+                                Math.sin(angle) * radius
+                            );
+                            bunGroup.add(seed);
+                        }
+                        
+                        // Random position in crate (scattered)
+                        const layer = Math.floor(b / 4);
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = Math.random() * boxSz * 0.8;
+                        
+                        bunGroup.position.set(
+                            Math.cos(angle) * radius,
+                            0.1 + layer * 0.12,
+                            Math.sin(angle) * radius
+                        );
+                        bunGroup.rotation.y = Math.random() * Math.PI * 2;
+                        
+                        ingGroup.add(bunGroup);
+                    }
+
+                } else if (isCheeseCrate) {
+                    // --- CHEESE CRATE CONTENTS: Giant cheese wedge (3D model style) ---
+                    const cheeseMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xFFD700, 
+                        roughness: 0.7,
+                        metalness: 0.0
+                    });
+                    
+                    const crustMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xDAA520,
+                        roughness: 0.8
+                    });
+                    
+                    const holeMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xB8860B,
+                        roughness: 0.8
+                    });
+                    
+                    // Create giant cheese wedge using triangular prism
+                    const cheeseGroup = new THREE.Group();
+                    
+                    // Main wedge body (triangular prism)
+                    const wedgeShape = new THREE.Shape();
+                    wedgeShape.moveTo(-0.25, 0);
+                    wedgeShape.lineTo(0.25, 0);
+                    wedgeShape.lineTo(0, 0.35);
+                    wedgeShape.closePath();
+                    
+                    const extrudeSettings = { 
+                        depth: 0.3, 
+                        bevelEnabled: true,
+                        bevelThickness: 0.01,
+                        bevelSize: 0.01,
+                        bevelSegments: 2
+                    };
+                    
+                    const wedgeGeo = new THREE.ExtrudeGeometry(wedgeShape, extrudeSettings);
+                    const wedge = new THREE.Mesh(wedgeGeo, cheeseMat);
+                    wedge.rotation.x = -Math.PI / 2;
+                    wedge.rotation.z = Math.PI / 2;
+                    wedge.position.set(0, 0.18, 0);
+                    wedge.castShadow = true;
+                    cheeseGroup.add(wedge);
+                    
+                    // Crust on the curved edge (rind)
+                    const rindCurve = new THREE.Shape();
+                    rindCurve.moveTo(-0.25, 0);
+                    rindCurve.lineTo(0.25, 0);
+                    rindCurve.lineTo(0, 0.35);
+                    rindCurve.closePath();
+                    
+                    const rindGeo = new THREE.ExtrudeGeometry(rindCurve, { 
+                        depth: 0.015, 
+                        bevelEnabled: false 
+                    });
+                    const rind = new THREE.Mesh(rindGeo, crustMat);
+                    rind.rotation.x = -Math.PI / 2;
+                    rind.rotation.z = Math.PI / 2;
+                    rind.position.set(0, 0.18, -0.16);
+                    cheeseGroup.add(rind);
+                    
+                    // Large cheese holes (scattered on visible faces)
+                    const holePositions = [
+                        { x: 0.08, y: 0.15, z: 0.05 },
+                        { x: -0.1, y: 0.22, z: 0.02 },
+                        { x: 0.05, y: 0.28, z: -0.03 },
+                        { x: -0.05, y: 0.12, z: 0.08 },
+                        { x: 0.12, y: 0.25, z: -0.05 },
+                        { x: -0.08, y: 0.18, z: -0.08 },
+                        { x: 0.02, y: 0.2, z: 0.1 }
+                    ];
+                    
+                    holePositions.forEach(pos => {
+                        const hole = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.025 + Math.random() * 0.015, 8, 8),
+                            holeMat
+                        );
+                        hole.scale.set(1, 0.8, 1);
+                        hole.position.set(pos.x, pos.y, pos.z);
+                        cheeseGroup.add(hole);
+                    });
+                    
+                    ingGroup.add(cheeseGroup);
+
+                } else if (isEggCrate) {
+                    // --- EGG CRATE CONTENTS: Giant egg tray with eggs ---
+                    const cardboardMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xC8A870, 
+                        roughness: 0.95
+                    });
+                    
+                    const eggMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xFFF8DC, 
+                        roughness: 0.6
+                    });
+                    
+                    const speckleMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xD4A574,
+                        transparent: true,
+                        opacity: 0.4
+                    });
+                    
+                    const boxSz = this.ts * 0.35;
+                    
+                    // Create 1 giant egg tray filling the crate
+                    const trayGroup = new THREE.Group();
+                    
+                    // Large tray base
+                    const trayBase = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.65, 0.04, 0.55),
+                        cardboardMat
+                    );
+                    trayBase.position.y = 0.02;
+                    trayGroup.add(trayBase);
+                    
+                    // Tray walls
+                    const wallH = 0.08;
+                    // Front
+                    const frontWall = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.65, wallH, 0.02),
+                        cardboardMat
+                    );
+                    frontWall.position.set(0, 0.04 + wallH / 2, 0.265);
+                    trayGroup.add(frontWall);
+                    
+                    // Back
+                    const backWall = frontWall.clone();
+                    backWall.position.z = -0.265;
+                    trayGroup.add(backWall);
+                    
+                    // Left
+                    const leftWall = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.02, wallH, 0.55),
+                        cardboardMat
+                    );
+                    leftWall.position.set(-0.315, 0.04 + wallH / 2, 0);
+                    trayGroup.add(leftWall);
+                    
+                    // Right
+                    const rightWall = leftWall.clone();
+                    rightWall.position.x = 0.315;
+                    trayGroup.add(rightWall);
+                    
+                    // Egg cups and eggs (5 rows x 6 columns = 30 eggs)
+                    const rows = 5;
+                    const cols = 6;
+                    const eggSpacingX = 0.1;
+                    const eggSpacingZ = 0.1;
+                    const startX = -(cols - 1) * eggSpacingX / 2;
+                    const startZ = -(rows - 1) * eggSpacingZ / 2;
+                    
+                    for (let row = 0; row < rows; row++) {
+                        for (let col = 0; col < cols; col++) {
+                            const cupX = startX + col * eggSpacingX;
+                            const cupZ = startZ + row * eggSpacingZ;
+                            
+                            // Cup dimple
+                            const cup = new THREE.Mesh(
+                                new THREE.SphereGeometry(0.045, 10, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+                                cardboardMat
+                            );
+                            cup.position.set(cupX, 0.04, cupZ);
+                            cup.rotation.x = Math.PI;
+                            trayGroup.add(cup);
+                            
+                            // Egg in cup (most cups have eggs)
+                            if (Math.random() > 0.15) {
+                                const egg = new THREE.Mesh(
+                                    new THREE.SphereGeometry(0.04, 14, 14),
+                                    eggMat
+                                );
+                                egg.scale.set(0.85, 1.1, 0.85);
+                                egg.position.set(cupX, 0.09, cupZ);
+                                egg.castShadow = true;
+                                trayGroup.add(egg);
+                                
+                                // Speckles on egg
+                                for (let s = 0; s < 3; s++) {
+                                    const speckle = new THREE.Mesh(
+                                        new THREE.SphereGeometry(0.004, 4, 4),
+                                        speckleMat
+                                    );
+                                    const angle = Math.random() * Math.PI * 2;
+                                    const radius = 0.03;
+                                    speckle.position.set(
+                                        cupX + Math.cos(angle) * radius,
+                                        0.09 + (Math.random() - 0.5) * 0.04,
+                                        cupZ + Math.sin(angle) * radius
+                                    );
+                                    trayGroup.add(speckle);
+                                }
+                            }
+                        }
+                    }
+                    
+                    trayGroup.position.y = 0.08;
+                    ingGroup.add(trayGroup);
+
+                } else if (!isRiceCrate && !isDoughCrate && !isBreadCrate && !isEggCrate && !isCheeseCrate) {
+                    // --- WOODEN BOX CONTENTS: BIG pile of produce INSIDE the box ---
                     const fillCount = 10;
                     const boxSz = this.ts * 0.32;
                     for (let item = 0; item < fillCount; item++) {
@@ -1687,13 +2639,13 @@ export class KitchenRenderer {
                         }
 
                         if (ingMesh) {
-                            // Stack in layers to fill the box
+                            // Stack in layers INSIDE the crate (lower Y position)
                             const layer = Math.floor(item / 4); // 4 per layer
-                            const layerY = baseH + 0.14 + layer * 0.10;
+                            const layerY = 0.12 + layer * 0.08; // Start lower, inside the crate
                             ingMesh.position.set(
-                                (Math.random() - 0.5) * boxSz * 1.3,
+                                (Math.random() - 0.5) * boxSz * 1.1, // Slightly tighter spread
                                 layerY,
-                                (Math.random() - 0.5) * boxSz * 1.3
+                                (Math.random() - 0.5) * boxSz * 1.1
                             );
                             ingMesh.rotation.set(
                                 Math.random() * 0.3,
@@ -1708,78 +2660,137 @@ export class KitchenRenderer {
 
                 group.add(ingGroup);
             }
-            // Labels
-            const labelY = baseH + 0.7;
-            this.addLabel(group, st.ingredient ? this.config.INGREDIENTS[st.ingredient]?.emoji || '📦' : '📦', labelY);
-            if (st.ingredient && this.config.INGREDIENTS[st.ingredient]) {
-                this.addLabel(group, this.config.INGREDIENTS[st.ingredient].name, labelY + 0.4, 'nameLabel');
-            }
+            // Labels removed - now using door stickers instead
         }
 
         if (st.type === 'chopping') {
-            // --- PREMIUM CHOPPING BOARD on steel counter ---
+            // --- CLEAN MODERN CHOPPING STATION ---
+            
+            // Wooden cutting board - simple and clean
             const boardGroup = new THREE.Group();
             boardGroup.name = 'choppingBoard';
 
-            // Wooden cutting board (thick, with wood grain)
-            const boardWood = new THREE.MeshStandardMaterial({ color: 0xC8A26E, roughness: 0.8, metalness: 0.0 });
-            const boardDark = new THREE.MeshStandardMaterial({ color: 0xA07850, roughness: 0.85 });
-            const board = new THREE.Mesh(new THREE.BoxGeometry(this.ts * 0.7, 0.06, this.ts * 0.55), boardWood);
+            // Main cutting board - thick wooden block
+            const boardMat = new THREE.MeshStandardMaterial({ 
+                color: 0xB8956A, 
+                roughness: 0.75, 
+                metalness: 0.0
+            });
+            const board = new THREE.Mesh(
+                new THREE.BoxGeometry(this.ts * 0.65, 0.06, this.ts * 0.5), 
+                boardMat
+            );
             board.position.y = baseH + 0.06;
             board.castShadow = true;
+            board.receiveShadow = true;
             boardGroup.add(board);
 
-            // Wood grain stripes
-            for (let stripe = 0; stripe < 5; stripe++) {
-                const grain = new THREE.Mesh(
-                    new THREE.BoxGeometry(this.ts * 0.68, 0.002, 0.03),
-                    stripe % 2 === 0 ? boardDark : boardWood
-                );
-                grain.position.set(0, baseH + 0.092, (stripe - 2) * (this.ts * 0.1));
-                boardGroup.add(grain);
-            }
-
-            // Juice groove (carved border)
-            const grooveMat = new THREE.MeshStandardMaterial({ color: 0x997755, roughness: 0.9 });
+            // Simple border groove
+            const grooveMat = new THREE.MeshStandardMaterial({ 
+                color: 0x8B6F47, 
+                roughness: 0.85
+            });
             const groove = new THREE.Mesh(
-                new THREE.BoxGeometry(this.ts * 0.62, 0.005, this.ts * 0.45),
+                new THREE.BoxGeometry(this.ts * 0.60, 0.004, this.ts * 0.45),
                 grooveMat
             );
-            groove.position.y = baseH + 0.093;
+            groove.position.y = baseH + 0.091;
             boardGroup.add(groove);
 
             group.add(boardGroup);
 
-            // Knife model lying beside the board
+            // Simple chef's knife - clean design
             const knifeGroup = new THREE.Group();
             knifeGroup.name = 'knife';
 
-            // Handle (dark ergonomic)
-            const hGeo = new THREE.BoxGeometry(0.05, 0.04, 0.22);
-            const hMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 });
-            const handle = new THREE.Mesh(hGeo, hMat);
-            handle.position.z = 0.15;
+            // Handle - dark wood/plastic
+            const handleMat = new THREE.MeshStandardMaterial({ 
+                color: 0x2d2d2d, 
+                roughness: 0.5
+            });
+            const handle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.025, 0.025, 0.3, 8),
+                handleMat
+            );
+            handle.rotation.z = Math.PI / 2;
+            handle.position.set(-0.15, 0, 0);
+            handle.castShadow = true;
             knifeGroup.add(handle);
 
-            // Rivets on handle
-            const rivetMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA, metalness: 0.8 });
-            for (let r = 0; r < 2; r++) {
-                const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.06, 6), rivetMat);
-                rivet.rotation.x = Math.PI / 2;
-                rivet.position.set(0, 0, 0.1 + r * 0.08);
-                knifeGroup.add(rivet);
+            // Handle grip rings
+            const gripMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a1a, 
+                roughness: 0.7 
+            });
+            for (let i = 0; i < 3; i++) {
+                const ring = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.027, 0.027, 0.015, 8),
+                    gripMat
+                );
+                ring.rotation.z = Math.PI / 2;
+                ring.position.set(-0.22 + i * 0.08, 0, 0);
+                knifeGroup.add(ring);
             }
 
-            // Blade (wide chef's knife)
-            const bGeo = new THREE.BoxGeometry(0.02, 0.1, 0.35);
-            const bMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, metalness: 0.9, roughness: 0.1 });
-            const blade = new THREE.Mesh(bGeo, bMat);
-            blade.position.z = -0.12;
+            // Blade - shiny steel
+            const bladeMat = new THREE.MeshStandardMaterial({ 
+                color: 0xDDDDDD, 
+                metalness: 0.95, 
+                roughness: 0.1
+            });
+            
+            // Main blade body
+            const blade = new THREE.Mesh(
+                new THREE.BoxGeometry(0.45, 0.015, 0.15),
+                bladeMat
+            );
+            blade.position.set(0.15, 0, 0);
+            blade.castShadow = true;
             knifeGroup.add(blade);
 
-            knifeGroup.position.set(this.ts * 0.38, baseH + 0.1, 0);
-            knifeGroup.rotation.y = -0.15;
-            knifeGroup.rotation.z = Math.PI / 2; // Lay flat
+            // Blade tip (pointed end)
+            const tipGeo = new THREE.ConeGeometry(0.075, 0.12, 4);
+            const tip = new THREE.Mesh(tipGeo, bladeMat);
+            tip.rotation.z = -Math.PI / 2;
+            tip.position.set(0.43, 0, 0);
+            knifeGroup.add(tip);
+
+            // Sharp edge highlight
+            const edgeMat = new THREE.MeshStandardMaterial({ 
+                color: 0xFFFFFF, 
+                metalness: 1.0, 
+                roughness: 0.05,
+                emissive: 0x555555,
+                emissiveIntensity: 0.1
+            });
+            const edge = new THREE.Mesh(
+                new THREE.BoxGeometry(0.45, 0.008, 0.152),
+                edgeMat
+            );
+            edge.position.set(0.15, 0.01, 0);
+            knifeGroup.add(edge);
+
+            // Bolster (metal guard)
+            const bolsterMat = new THREE.MeshStandardMaterial({ 
+                color: 0x999999, 
+                metalness: 0.8, 
+                roughness: 0.3 
+            });
+            const bolster = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.03, 0.03, 0.05, 8),
+                bolsterMat
+            );
+            bolster.rotation.z = Math.PI / 2;
+            bolster.position.set(0, 0, 0);
+            bolster.castShadow = true;
+            knifeGroup.add(bolster);
+
+            // Position knife - resting beside board
+            knifeGroup.position.set(this.ts * 0.25, baseH + 0.1, -this.ts * 0.2);
+            knifeGroup.rotation.x = 0;
+            knifeGroup.rotation.y = 0.3; // Slight angle
+            knifeGroup.rotation.z = 0;
+            knifeGroup.castShadow = true;
             group.add(knifeGroup);
         }
 
@@ -2046,6 +3057,28 @@ export class KitchenRenderer {
             lHandle.position.set(0, 0.065, sz * 0.41);
             lidGroup.add(lHandle);
 
+            // --- RECYCLE SYMBOL STICKER on lid ---
+            // Load the recycle image texture
+            const textureLoader = new THREE.TextureLoader();
+            const recycleTexture = textureLoader.load('/assets/triangular-arrows-sign-for-recycle.png');
+            
+            const recycleMat = new THREE.MeshStandardMaterial({ 
+                map: recycleTexture,
+                transparent: true,
+                roughness: 0.3,
+                metalness: 0.2
+            });
+            
+            // Create sticker mesh (circular) on top of lid
+            const stickerSize = sz * 0.35;
+            const recycleSticker = new THREE.Mesh(
+                new THREE.CircleGeometry(stickerSize, 32),
+                recycleMat
+            );
+            recycleSticker.position.set(0, 0.058, sz * 0.41);
+            recycleSticker.rotation.x = -Math.PI / 2;
+            lidGroup.add(recycleSticker);
+
             // Foot pedal at base
             const pedalMat = new THREE.MeshStandardMaterial({ color: 0x006400, metalness: 0.75 });
             const pedal = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.4, 0.035, sz * 0.22), pedalMat);
@@ -2301,7 +3334,8 @@ export class KitchenRenderer {
         const existing = sm.group.getObjectByName('contents');
         if (existing) sm.group.remove(existing);
 
-        if (stationData.contents) {
+        // DON'T create contents for crate stations (ingredients are stored inside, not displayed)
+        if (stationData.contents && stationData.type !== 'crate') {
             const cont = this.createContentMesh(stationData.contents);
             cont.name = 'contents';
 
@@ -2474,23 +3508,60 @@ export class KitchenRenderer {
             if (existBar) ui.remove(existBar);
             const existBg = ui.getObjectByName('chopBarBg');
             if (existBg) ui.remove(existBg);
+            const existBorder = ui.getObjectByName('chopBarBorder');
+            if (existBorder) ui.remove(existBorder);
 
             if (!isDoneChop) {
+                // Background
                 const bgGeo = new THREE.BoxGeometry(this.ts * 0.82, 0.12, 0.18);
-                const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 });
+                const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5 });
                 const bg = new THREE.Mesh(bgGeo, bgMat);
                 bg.name = 'chopBarBg';
                 bg.position.set(0, 1.5, -0.6);
                 ui.add(bg);
+                
+                // Border for depth
+                const borderGeo = new THREE.BoxGeometry(this.ts * 0.84, 0.14, 0.19);
+                const borderMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.6 });
+                const border = new THREE.Mesh(borderGeo, borderMat);
+                border.name = 'chopBarBorder';
+                border.position.set(0, 1.5, -0.61);
+                ui.add(border);
 
+                // Progress bar with gradient effect
                 const p = Math.min(stationData.chopProgress / 100, 1.0);
                 const barGeo = new THREE.BoxGeometry(this.ts * 0.8 * p, 0.08, 0.15);
-                const barColor = new THREE.Color().setHSL(0.3 + p * 0.2, 0.9, 0.5);
-                const barMat = new THREE.MeshBasicMaterial({ color: barColor });
+                
+                // Color transitions: yellow -> lime green -> bright green
+                const barColor = new THREE.Color();
+                if (p < 0.5) {
+                    barColor.setHSL(0.15 + p * 0.2, 0.95, 0.5); // Yellow to lime
+                } else {
+                    barColor.setHSL(0.25 + p * 0.15, 0.9, 0.45 + p * 0.1); // Lime to green
+                }
+                
+                const barMat = new THREE.MeshBasicMaterial({ 
+                    color: barColor,
+                    transparent: true,
+                    opacity: 0.9
+                });
                 const bar = new THREE.Mesh(barGeo, barMat);
                 bar.name = 'chopBar';
                 bar.position.set(-this.ts * 0.4 * (1 - p), 1.5, -0.6);
                 ui.add(bar);
+                
+                // Add shine effect when near completion
+                if (p > 0.8) {
+                    const shineGeo = new THREE.BoxGeometry(this.ts * 0.8 * p, 0.04, 0.16);
+                    const shineMat = new THREE.MeshBasicMaterial({ 
+                        color: 0xFFFFFF, 
+                        transparent: true, 
+                        opacity: (p - 0.8) * 2 * 0.4 
+                    });
+                    const shine = new THREE.Mesh(shineGeo, shineMat);
+                    shine.position.set(-this.ts * 0.4 * (1 - p), 1.54, -0.6);
+                    ui.add(shine);
+                }
             }
 
             if (isDoneChop && stationData.contents && stationData.type === 'chopping') {
@@ -2499,6 +3570,7 @@ export class KitchenRenderer {
                     this.addLabel(ui, '✅', 1.8);
                     const newReady = ui.children[ui.children.length - 1];
                     newReady.name = 'readyIcon';
+                    newReady.scale.set(1.5, 1.5, 1);
                 }
             } else {
                 const existReady = ui.getObjectByName('readyIcon');
@@ -3874,12 +4946,72 @@ export class KitchenRenderer {
                 finalHeight = layerY + 0.32;
             }
             // ==========================================
-            // OMELETTE ASSEMBLY (progressive)
+            // UNCOOKED EGG - Sunny Side Up (raw appearance)
             // ==========================================
-            else if (hasEgg) {
+            else if (hasEgg && !content.cooked) {
                 let layerY = 0.1;
 
-                // Folded omelette base (realistic half-moon shape)
+                // --- 2. SUNNY SIDE UP EGG ---
+                // Gumawa ako ng "Group" para pagsamahin ang puti at pula
+                const eggGroup = new THREE.Group();
+
+                // --- A. Itlog na Puti (The White) ---
+                // Gumamit ako ng MeshPhysicalMaterial para sa "glassy" o hilaw na effect
+                const whiteMat = new THREE.MeshPhysicalMaterial({
+                    color: 0xffffff, // Puti
+                    roughness: 0.05, // Makintab
+                    transmission: 0.7, // Medyo transparent (parang salamin/tubig)
+                    thickness: 0.5, // Kapal para sa transmission effect
+                    transparent: true,
+                    opacity: 0.8 // Dagdag transparency
+                });
+
+                const whiteBaseGeo = new THREE.SphereGeometry(1.8, 32, 16);
+
+                // Gumawa ako ng dalawang flattened sphere na magkapatong para hindi perfect bilog ang puti
+                const whitePart1 = new THREE.Mesh(whiteBaseGeo, whiteMat);
+                whitePart1.scale.set(1.4, 0.04, 1.2); // Sobrang flat
+                whitePart1.position.set(0.1, layerY + 0.05, 0);
+                whitePart1.castShadow = true;
+                whitePart1.receiveShadow = true;
+                eggGroup.add(whitePart1);
+
+                const whitePart2 = new THREE.Mesh(whiteBaseGeo, whiteMat);
+                whitePart2.scale.set(1.1, 0.04, 1.5); // Ibang shape naman
+                whitePart2.position.set(-0.2, layerY + 0.05, 0.1);
+                whitePart2.castShadow = true;
+                whitePart2.receiveShadow = true;
+                eggGroup.add(whitePart2);
+
+                // --- B. Itlog na Pula (The Yolk) ---
+                const yolkGeo = new THREE.SphereGeometry(0.7, 32, 32);
+                const yolkMat = new THREE.MeshStandardMaterial({
+                    color: 0xff8c00, // Matingkad na orange
+                    roughness: 0.02, // SOBRANG KINTAB (ito ang susi sa "not cooked" look)
+                    metalness: 0.1,
+                    emissive: 0x331100, // Konting glow sa ilalim
+                });
+                const yolk = new THREE.Mesh(yolkGeo, yolkMat);
+                yolk.scale.set(1, 0.75, 1); // Medyo flat ng konti pero umbok pa rin
+                yolk.position.set(0, layerY + 0.3, 0); // Nakapatong sa puti
+                yolk.castShadow = true;
+                eggGroup.add(yolk);
+
+                // Scale down the entire egg to fit on plate
+                eggGroup.scale.set(0.15, 0.15, 0.15);
+                eggGroup.position.y = layerY;
+
+                group.add(eggGroup);
+
+                finalHeight = layerY + 0.15;
+            }
+            // ==========================================
+            // COOKED EGG - Omelette (cooked appearance)
+            // ==========================================
+            else if (hasEgg && content.cooked) {
+                let layerY = 0.1;
+
+                // Main omelette body (more natural egg shape when lying down)
                 const eggColor = content.burnt ? 0x000000 : 0xFFE66D;
                 const eggMat = new THREE.MeshStandardMaterial({
                     color: eggColor,
@@ -3887,13 +5019,14 @@ export class KitchenRenderer {
                     metalness: 0.1
                 });
 
-                // Main omelette body (half cylinder for folded look)
-                const omelette = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.38, 0.38, 0.12, 32, 1, false, 0, Math.PI),
-                    eggMat
-                );
+                const omeletteGeo = new THREE.SphereGeometry(0.25, 32, 16);
+                const omelette = new THREE.Mesh(omeletteGeo, eggMat);
+                // More natural egg shape - slightly oval but not extremely flat
+                omelette.scale.set(1.3, 0.6, 1.1);
+                omelette.position.y = layerY + 0.15;
+                // Rotate to lie on its side like a natural egg
                 omelette.rotation.z = Math.PI / 2;
-                omelette.position.y = layerY + 0.06;
+                omelette.rotation.y = Math.PI / 8; // Slight tilt for natural look
                 group.add(omelette);
 
                 // Omelette surface texture (slightly browned spots)
@@ -3909,15 +5042,15 @@ export class KitchenRenderer {
                         );
                         brownSpot.rotation.x = -Math.PI / 2;
                         brownSpot.position.set(
-                            (Math.random() - 0.5) * 0.5,
-                            layerY + 0.12,
+                            (Math.random() - 0.5) * 0.4,
+                            layerY + 0.15 + (Math.random() - 0.5) * 0.15,
                             (Math.random() - 0.5) * 0.3
                         );
                         group.add(brownSpot);
                     }
                 }
 
-                // Cheese filling visible at opening (melted and gooey)
+                // Add cheese if present (melted on omelette)
                 if (hasCheese) {
                     const cheeseMat = new THREE.MeshStandardMaterial({
                         color: content.burnt ? 0x000000 : 0xFFD700,
@@ -3931,7 +5064,7 @@ export class KitchenRenderer {
                         cheeseMat
                     );
                     cheeseOoze.scale.set(1.2, 0.4, 0.8);
-                    cheeseOoze.position.set(0.25, layerY + 0.05, 0);
+                    cheeseOoze.position.set(0.2, layerY + 0.15, 0.1);
                     group.add(cheeseOoze);
 
                     // Cheese drip
@@ -3939,11 +5072,11 @@ export class KitchenRenderer {
                         new THREE.CylinderGeometry(0.02, 0.03, 0.06, 8),
                         cheeseMat
                     );
-                    drip.position.set(0.28, layerY + 0.02, 0.05);
+                    drip.position.set(0.25, layerY + 0.08, 0.15);
                     group.add(drip);
                 }
 
-                // Mushroom pieces visible inside (peeking out)
+                // Add mushroom if present (on omelette)
                 if (hasMushroom) {
                     for (let mp = 0; mp < 3; mp++) {
                         // Mushroom cap
@@ -3955,9 +5088,9 @@ export class KitchenRenderer {
                             })
                         );
                         cap.position.set(
-                            0.15 + mp * 0.08,
-                            layerY + 0.07,
-                            (Math.random() - 0.5) * 0.15
+                            0.1 + mp * 0.06,
+                            layerY + 0.18,
+                            (Math.random() - 0.5) * 0.12
                         );
                         cap.rotation.set(
                             (Math.random() - 0.5) * 0.5,
@@ -3980,14 +5113,14 @@ export class KitchenRenderer {
                         (Math.random() - 0.5) * 0.4
                     );
                     chive.position.set(
-                        (Math.random() - 0.5) * 0.3,
-                        layerY + 0.13,
-                        (Math.random() - 0.5) * 0.2
+                        (Math.random() - 0.5) * 0.25,
+                        layerY + 0.22,
+                        (Math.random() - 0.5) * 0.18
                     );
                     group.add(chive);
                 }
 
-                finalHeight = layerY + 0.15;
+                finalHeight = layerY + 0.28;
             }
             // ==========================================
             // SALAD ASSEMBLY (progressive)
@@ -4596,7 +5729,7 @@ export class KitchenRenderer {
                     });
                 }
 
-                const targetAngle = (hasContents || playerNear) ? -Math.PI * 0.55 : 0;
+                const targetAngle = (hasContents || playerNear || eff.lidOpen) ? -Math.PI * 0.55 : 0;
                 eff.lidAngle = eff.lidAngle + (targetAngle - eff.lidAngle) * (delta * 6);
                 eff.lidGroup.rotation.x = eff.lidAngle;
             }
@@ -4616,8 +5749,9 @@ export class KitchenRenderer {
                     });
                 }
 
-                // Check if this is an oven (door swings down) or freezer (lid flips up)
+                // Check door type: oven, freezer, or crate
                 const isOven = eff.door.name === 'ovenDoor';
+                const isCrate = eff.door.name === 'crateDoor';
 
                 if (isOven) {
                     // OVEN: Door swings down (positive X rotation)
@@ -4632,6 +5766,20 @@ export class KitchenRenderer {
                     if (eff.glow && eff.glowMat) {
                         const openFactor = Math.abs(eff.doorAngle / (Math.PI * 0.5));
                         eff.glowMat.opacity = Math.max(eff.glowMat.opacity, openFactor * 0.15);
+                    }
+                } else if (isCrate) {
+                    // CRATE: Lid flips forward (negative X rotation from back hinge)
+                    const targetDoorAngle = playerNear ? -Math.PI * 0.6 : 0; // 108 degrees forward
+
+                    eff.doorAngle = eff.doorAngle !== undefined ? eff.doorAngle : 0;
+                    const speed = playerNear ? 5.5 : 3.5;
+                    eff.doorAngle += (targetDoorAngle - eff.doorAngle) * Math.min(1, delta * speed);
+                    eff.door.rotation.x = eff.doorAngle;
+
+                    // Sync Internal Light with door angle
+                    if (eff.light) {
+                        const openFactor = Math.abs(eff.doorAngle / (Math.PI * 0.6));
+                        eff.light.intensity = openFactor * 1.8;
                     }
                 } else {
                     // FREEZER: Lid flips up (negative X rotation from back hinge)
@@ -4795,37 +5943,85 @@ export class KitchenRenderer {
                 const now = Date.now();
                 const isChopping = sm.lastChopUpdate && (now - sm.lastChopUpdate) < 300;
                 if (isChopping) {
-                    const angle = now * 0.035;
-                    const height = Math.abs(Math.sin(angle)) * 0.35;
-                    knife.rotation.x = Math.PI * 0.15 + Math.sin(angle) * 0.2;
-                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.2) + height;
-                    knife.position.x = 0;
-                    knife.rotation.z = 0;
+                    const angle = now * 0.04; // Faster animation
+                    const chopCycle = Math.sin(angle);
+                    
+                    // More dramatic up-down motion
+                    const height = Math.abs(chopCycle) * 0.45;
+                    
+                    // Realistic chopping motion - rotate and lift
+                    knife.rotation.x = Math.PI * 0.2 + chopCycle * 0.35;
+                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.25) + height;
+                    knife.position.x = chopCycle * 0.05; // Slight forward motion
+                    knife.rotation.z = chopCycle * 0.08; // Slight twist
+                    
+                    // Add impact effect when knife hits board
+                    if (chopCycle < -0.9) {
+                        knife.position.y -= 0.02; // Impact compression
+                    }
 
                     if (!sm.chopParticles) {
                         sm.chopParticles = [];
                         sm.particleGroup = new THREE.Group();
                         sm.group.add(sm.particleGroup);
                     }
+                    
                     const content = sm.group.getObjectByName('contents');
-                    if (content && Math.random() < 0.4) {
+                    
+                    // More particles on impact
+                    if (content && chopCycle < -0.85 && Math.random() < 0.6) {
                         const ingMesh = content.children[0];
                         const color = (ingMesh && ingMesh.material) ? ingMesh.material.color : 0xffffff;
-                        const p = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), new THREE.MeshBasicMaterial({ color, transparent: true }));
-                        p.position.set(0, (sm.baseMesh.position.y * 2 + 0.3), 0);
-                        p.userData = { vx: (Math.random() - 0.5) * 4, vy: 2 + Math.random() * 3, vz: (Math.random() - 0.5) * 4, life: 0.6 };
-                        sm.particleGroup.add(p);
-                        sm.chopParticles.push(p);
+                        
+                        // Create multiple particles per chop
+                        for (let i = 0; i < 2; i++) {
+                            const size = 0.04 + Math.random() * 0.04;
+                            const p = new THREE.Mesh(
+                                new THREE.BoxGeometry(size, size, size), 
+                                new THREE.MeshBasicMaterial({ color, transparent: true })
+                            );
+                            p.position.set(
+                                (Math.random() - 0.5) * 0.1, 
+                                (sm.baseMesh.position.y * 2 + 0.35), 
+                                (Math.random() - 0.5) * 0.1
+                            );
+                            p.userData = { 
+                                vx: (Math.random() - 0.5) * 5, 
+                                vy: 2.5 + Math.random() * 3.5, 
+                                vz: (Math.random() - 0.5) * 5, 
+                                life: 0.7,
+                                spin: (Math.random() - 0.5) * 10
+                            };
+                            sm.particleGroup.add(p);
+                            sm.chopParticles.push(p);
+                        }
                     }
+                    
+                    // Enhanced ingredient shake effect
                     if (content) {
-                        content.scale.setScalar(1 + Math.sin(angle * 3) * 0.15);
-                        content.position.x = Math.sin(angle * 10) * 0.03;
+                        const shake = Math.abs(chopCycle) > 0.85 ? 0.25 : 0.1;
+                        content.scale.setScalar(1 + Math.sin(angle * 4) * shake);
+                        content.position.x = Math.sin(angle * 12) * 0.05;
+                        content.position.z = Math.cos(angle * 12) * 0.05;
+                        content.rotation.y = Math.sin(angle * 8) * 0.15;
                     }
                 } else {
-                    knife.position.x += (0.3 - knife.position.x) * 0.1;
-                    knife.position.y += (sm.baseMesh.position.y * 2 + 0.05 - knife.position.y) * 0.1;
-                    knife.rotation.z += (Math.PI / 2 - knife.rotation.z) * 0.1;
-                    knife.rotation.x *= 0.8;
+                    // Smooth return to rest position
+                    knife.position.x += (0.3 - knife.position.x) * 0.12;
+                    knife.position.y += (sm.baseMesh.position.y * 2 + 0.06 - knife.position.y) * 0.12;
+                    knife.rotation.z += (Math.PI / 2 - knife.rotation.z) * 0.12;
+                    knife.rotation.x *= 0.85;
+                    
+                    // Reset content position
+                    const content = sm.group.getObjectByName('contents');
+                    if (content) {
+                        content.scale.x += (1 - content.scale.x) * 0.15;
+                        content.scale.y += (1 - content.scale.y) * 0.15;
+                        content.scale.z += (1 - content.scale.z) * 0.15;
+                        content.position.x *= 0.85;
+                        content.position.z *= 0.85;
+                        content.rotation.y *= 0.85;
+                    }
                 }
             }
 
@@ -4848,12 +6044,35 @@ export class KitchenRenderer {
             if (sm.chopParticles) {
                 for (let i = sm.chopParticles.length - 1; i >= 0; i--) {
                     const p = sm.chopParticles[i];
+                    
+                    // Physics with air resistance
                     p.position.x += p.userData.vx * delta;
                     p.position.y += p.userData.vy * delta;
                     p.position.z += p.userData.vz * delta;
-                    p.userData.vy -= 15 * delta;
+                    
+                    // Gravity
+                    p.userData.vy -= 18 * delta;
+                    
+                    // Air resistance
+                    p.userData.vx *= (1 - 2 * delta);
+                    p.userData.vz *= (1 - 2 * delta);
+                    
+                    // Rotation for tumbling effect
+                    if (p.userData.spin) {
+                        p.rotation.x += p.userData.spin * delta;
+                        p.rotation.y += p.userData.spin * 0.7 * delta;
+                        p.rotation.z += p.userData.spin * 0.5 * delta;
+                    }
+                    
+                    // Fade out
                     p.userData.life -= delta;
-                    p.material.opacity = p.userData.life / 0.6;
+                    p.material.opacity = Math.max(0, p.userData.life / 0.7);
+                    
+                    // Slight scale change
+                    const scale = 1 - (1 - p.userData.life / 0.7) * 0.3;
+                    p.scale.setScalar(scale);
+                    
+                    // Remove when done
                     if (p.userData.life <= 0 || p.position.y < 0) {
                         sm.particleGroup.remove(p);
                         sm.chopParticles.splice(i, 1);
