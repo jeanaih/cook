@@ -482,6 +482,13 @@ socket.on('loginSuccess', (user) => {
 
 socket.on('loginError', (data) => {
     showNotif('Login/Auth Error', data.msg, 'error');
+    
+    // Clear invalid localStorage if server requests it
+    if (data.clearStorage) {
+        console.log('🗑️ Clearing invalid stored credentials');
+        localStorage.removeItem('chef_user');
+        localStorage.removeItem('chef_user_guest');
+    }
 });
 
 socket.on('forceLogout', (data) => {
