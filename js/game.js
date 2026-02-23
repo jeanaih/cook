@@ -177,6 +177,25 @@ window.showMenu = (menuId) => {
         currentMenu = menuId;
     }
 
+    // Hide logo, profile, and connection status on non-main menus (for mobile landscape)
+    const logoContainer = document.querySelector('.logo-container');
+    const userProfile = document.getElementById('user-profile');
+    const connectionStatus = document.getElementById('connection-status');
+    
+    if (menuId === 'main') {
+        // Show on main menu
+        if (logoContainer) logoContainer.style.display = '';
+        if (userProfile) userProfile.style.display = '';
+        if (connectionStatus) connectionStatus.style.display = '';
+    } else {
+        // Hide on other menus (for mobile landscape optimization)
+        if (window.innerWidth <= 926 && window.matchMedia('(orientation: landscape)').matches) {
+            if (logoContainer) logoContainer.style.display = 'none';
+            if (userProfile) userProfile.style.display = 'none';
+            if (connectionStatus) connectionStatus.style.display = 'none';
+        }
+    }
+
     // Special handling for friends menu
     if (menuId === 'friends') {
         const guestWarning = document.getElementById('friends-guest-warning');
@@ -386,10 +405,12 @@ socket.on('loginSuccess', (user) => {
     const displayUserName = document.getElementById('display-user-name');
     const userAvatarIcon = document.querySelector('.user-avatar i');
     const userAvatarContainer = document.querySelector('.user-avatar');
+    const settingsFab = document.getElementById('settings-fab');
 
     if (loginOverlay) loginOverlay.classList.add('hidden');
     if (userProfile) userProfile.classList.remove('hidden');
     if (displayUserName) displayUserName.textContent = user.name || user.username;
+    if (settingsFab) settingsFab.classList.add('hidden'); // Hide settings button when logged in
 
     // Show avatar in the circle
     refreshUserAvatar();
@@ -789,9 +810,21 @@ function populateProfileData() {
     const xpText = document.getElementById('profile-xp-text');
     const xpBar = document.getElementById('profile-xp-bar');
 
-    if (displayName) displayName.textContent = currentUser.name || currentUser.username;
+    // Mobile Header Info
+    const mobileDisplayName = document.getElementById('profile-mobile-name');
+    const mobileDisplayImg = document.getElementById('profile-mobile-img');
+    const mobileLevelBadge = document.getElementById('profile-mobile-level');
+    const mobileXpText = document.getElementById('profile-mobile-xp-text');
+    const mobileXpBar = document.getElementById('profile-mobile-xp-bar');
+
+    const userName = currentUser.name || currentUser.username;
+    if (displayName) displayName.textContent = userName;
+    if (mobileDisplayName) mobileDisplayName.textContent = userName;
+
     selectedAvatarKey = currentUser.profileImage || 'chef_1';
-    if (displayImg) displayImg.src = getAvatarUrl(selectedAvatarKey);
+    const avatarUrl = getAvatarUrl(selectedAvatarKey);
+    if (displayImg) displayImg.src = avatarUrl;
+    if (mobileDisplayImg) mobileDisplayImg.src = avatarUrl;
 
     // User ID
     const displayId = document.getElementById('profile-display-id');
@@ -802,9 +835,15 @@ function populateProfileData() {
     const level = currentUser.level || 1;
     const currentXp = currentUser.xp || 0;
     const maxXp = level * 50; // Requirement increases by 50 per level
+    const xpPercentage = (currentXp / maxXp) * 100;
+    const xpTextContent = `${currentXp} / ${maxXp} XP`;
+
     if (levelBadge) levelBadge.textContent = `Lv. ${level}`;
-    if (xpText) xpText.textContent = `${currentXp} / ${maxXp} XP`;
-    if (xpBar) xpBar.style.width = `${(currentXp / maxXp) * 100}%`;
+    if (mobileLevelBadge) mobileLevelBadge.textContent = `Lv. ${level}`;
+    if (xpText) xpText.textContent = xpTextContent;
+    if (mobileXpText) mobileXpText.textContent = xpTextContent;
+    if (xpBar) xpBar.style.width = `${xpPercentage}%`;
+    if (mobileXpBar) mobileXpBar.style.width = `${xpPercentage}%`;
 
     // Game Statistics
     const stats = currentUser.stats || {};
@@ -1207,14 +1246,22 @@ window.selectAvatar = (key, elem) => {
     elem.classList.add('selected');
 
     const displayImg = document.getElementById('profile-display-img');
-    if (displayImg) displayImg.src = getAvatarUrl(key);
+    const mobileDisplayImg = document.getElementById('profile-mobile-img');
+    const avatarUrl = getAvatarUrl(key);
+    if (displayImg) displayImg.src = avatarUrl;
+    if (mobileDisplayImg) mobileDisplayImg.src = avatarUrl;
 };
 
 window.updateProfilePreview = () => {
     const nameInput = document.getElementById('profile-new-username');
     const displayName = document.getElementById('profile-display-name');
+    const mobileDisplayName = document.getElementById('profile-mobile-name');
+    const newName = nameInput.value || 'Chef';
     if (nameInput && displayName) {
-        displayName.textContent = nameInput.value || 'Chef';
+        displayName.textContent = newName;
+    }
+    if (mobileDisplayName) {
+        mobileDisplayName.textContent = newName;
     }
 };
 

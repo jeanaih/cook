@@ -725,6 +725,23 @@
         <div class="modal-content profile-card-new">
             <button class="modal-close-btn" onclick="closeProfileModal()"><i class="bi bi-x"></i></button>
 
+            <!-- Mobile Header (visible only on mobile) -->
+            <div class="profile-mobile-header">
+                <div class="profile-mobile-avatar">
+                    <img id="profile-mobile-img" src="/assets/avatars/chef1.jpg" alt="Chef Avatar">
+                    <div class="profile-mobile-level" id="profile-mobile-level">Lv. 1</div>
+                </div>
+                <div class="profile-mobile-info">
+                    <h2 id="profile-mobile-name">Chef Name</h2>
+                    <div class="profile-mobile-xp">
+                        <div class="mobile-xp-bar">
+                            <div class="mobile-xp-fill" id="profile-mobile-xp-bar" style="width: 0%;"></div>
+                        </div>
+                        <span id="profile-mobile-xp-text">0 / 1000 XP</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="profile-layout">
                 <!-- Sidebar -->
                 <div class="profile-sidebar">
@@ -758,17 +775,21 @@
                     <!-- Navigation -->
                     <div class="profile-nav-tabs">
                         <button class="profile-tab-btn active" onclick="switchProfileTab('stats')" id="btn-tab-stats">
-                            <i class="bi bi-bar-chart-fill"></i> Stats
+                            <i class="bi bi-bar-chart-fill"></i>
+                            <span>Stats</span>
                         </button>
                         <button class="profile-tab-btn" onclick="switchProfileTab('history')" id="btn-tab-history">
-                            <i class="bi bi-clock-history"></i> History
+                            <i class="bi bi-clock-history"></i>
+                            <span>History</span>
                         </button>
                         <button class="profile-tab-btn" onclick="switchProfileTab('achievements')"
                             id="btn-tab-achievements">
-                            <i class="bi bi-trophy-fill"></i> Awards
+                            <i class="bi bi-trophy-fill"></i>
+                            <span>Awards</span>
                         </button>
                         <button class="profile-tab-btn" onclick="switchProfileTab('customize')" id="btn-tab-customize">
-                            <i class="bi bi-person-gear"></i> Settings
+                            <i class="bi bi-person-gear"></i>
+                            <span>Settings</span>
                         </button>
                     </div>
                 </div>
