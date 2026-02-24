@@ -662,7 +662,8 @@ async function fetchMainLeaderboard() {
     listEl.innerHTML = '<div class="loading-spinner-small">Loading...</div>';
 
     try {
-        const response = await fetch(`/api/leaderboard?category=${currentLeaderboardCategory}&limit=10`);
+        const baseUrl = window.GAME_CONFIG?.BACKEND_URL || '';
+        const response = await fetch(`${baseUrl}/api/leaderboard?category=${currentLeaderboardCategory}&limit=10`);
         const data = await response.json();
 
         if (data.length === 0) {

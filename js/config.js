@@ -10,8 +10,8 @@ window.GAME_CONFIG = {
     BACKEND_URL: savedEnv === "production"
         ? "https://cook-server-production-db71.up.railway.app"
         : savedEnv === "render"
-        ? "https://cook-server-uiqt.onrender.com"
-        : "http://localhost:3000",
+            ? "https://cook-server-uiqt.onrender.com"
+            : "http://localhost:3000",
 
     // Helper function para mag-switch ng server
     switchServer: function (newEnv) {
