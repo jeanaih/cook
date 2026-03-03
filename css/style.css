@@ -2030,33 +2030,32 @@ body {
 /* ======= ORDERS BAR ======= */
 .orders-bar {
     position: fixed;
-    top: 15px;
+    top: 10px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     z-index: 90;
-    padding: 4px 12px;
+    padding: 3px 10px;
     background: rgba(0, 0, 0, 0.4);
-    border-radius: 30px;
+    border-radius: 20px;
     border: 1px solid var(--border);
     backdrop-filter: blur(8px);
-    scale: 0.9;
 }
 
 .orders-label {
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 11px;
     color: var(--accent);
     white-space: nowrap;
 }
 
 .orders-list {
     display: flex;
-    gap: 10px;
+    gap: 6px;
     overflow-x: auto;
-    max-width: 70vw;
+    max-width: 50vw;
     -ms-overflow-style: none;
     /* IE and Edge */
     scrollbar-width: none;
@@ -2070,10 +2069,10 @@ body {
 
 .order-card {
     background: rgba(30, 41, 59, 0.95);
-    border: 2px solid rgba(255, 210, 63, 0.3);
-    border-radius: var(--radius-sm);
-    padding: 10px 14px;
-    min-width: 120px;
+    border: 1px solid rgba(255, 210, 63, 0.3);
+    border-radius: 8px;
+    padding: 6px 10px;
+    min-width: 85px;
     text-align: center;
     position: relative;
     animation: orderSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -2082,7 +2081,7 @@ body {
 
 @keyframes orderSlideIn {
     from {
-        transform: translateY(-30px) scale(0.8);
+        transform: translateY(-20px) scale(0.8);
         opacity: 0;
     }
 
@@ -2092,65 +2091,30 @@ body {
     }
 }
 
-.order-card.urgent {
-    border-color: var(--danger);
-    animation: urgentPulse 0.8s ease-in-out infinite alternate;
-}
-
-@keyframes urgentPulse {
-    from {
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-    }
-
-    to {
-        box-shadow: 0 0 15px 3px rgba(239, 68, 68, 0.4);
-    }
-}
-
 .order-emoji {
-    font-size: 28px;
+    font-size: 20px;
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .order-name {
-    font-size: 12px;
+    font-size: 9px;
     font-weight: 800;
     color: var(--text);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
 .order-ingredients {
-    font-size: 16px;
-    margin-top: 4px;
-}
-
-.order-timer-bar {
-    width: 100%;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    margin-top: 6px;
-    overflow: hidden;
-}
-
-.order-timer-fill {
-    height: 100%;
-    border-radius: 2px;
-    background: var(--secondary);
-    transition: width 1s linear, background 0.3s;
-}
-
-.order-timer-fill.low {
-    background: var(--danger);
+    font-size: 13px;
+    margin-top: 2px;
 }
 
 .order-points {
-    font-size: 11px;
+    font-size: 9px;
     color: var(--accent);
     font-weight: 700;
-    margin-top: 3px;
+    margin-top: 2px;
 }
 
 /* ======= GAME CANVAS ======= */
@@ -3099,16 +3063,17 @@ body {
     }
 
     .orders-bar {
-        top: 65px;
+        top: 5px;
+        scale: 0.85;
     }
 
     .order-card {
-        min-width: 90px;
-        padding: 6px 8px;
+        min-width: 80px;
+        padding: 5px 7px;
     }
 
     .order-emoji {
-        font-size: 22px;
+        font-size: 20px;
     }
 
     .chat-container {
@@ -3775,6 +3740,56 @@ body {
     margin-bottom: 12px;
 }
 
+/* ======= HUD MENU BUTTON (Burger icon) ======= */
+.hud-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(6px);
+}
+
+.hud-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: var(--accent);
+    transform: scale(1.1);
+}
+
+.hud-menu-btn:active {
+    transform: scale(0.9);
+}
+
+/* Info button in pause/menu overlay */
+.btn-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: var(--radius-sm);
+    color: #60a5fa;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-info:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.6);
+}
+
 /* Server Table Status Badges */
 .status-badge {
     padding: 4px 8px;
@@ -3996,34 +4011,52 @@ body {
     }
 
     .orders-bar {
-        top: 10px;
-        padding: 3px 10px;
-        scale: 0.85;
+        top: 2px;
+        padding: 2px 8px;
+        scale: 0.8;
+        border-radius: 16px;
+        gap: 4px;
     }
 
     .orders-label {
-        font-size: 10px;
+        font-size: 9px;
+    }
+
+    .orders-list {
+        gap: 4px;
+        max-width: 60vw;
     }
 
     .order-card {
-        padding: 6px;
-        min-width: 80px;
+        padding: 4px 6px;
+        min-width: 65px;
+        border-radius: 6px;
+        border-width: 1px;
     }
 
     .order-emoji {
-        font-size: 20px;
+        font-size: 16px;
+        margin-bottom: 1px;
     }
 
     .order-name {
-        font-size: 10px;
+        font-size: 8px;
+        letter-spacing: 0.5px;
     }
 
     .order-ingredients {
-        font-size: 12px;
+        font-size: 10px;
+        margin-top: 1px;
+    }
+
+    .order-timer-bar {
+        height: 2px;
+        margin-top: 2px;
     }
 
     .order-points {
-        font-size: 10px;
+        font-size: 8px;
+        margin-top: 1px;
     }
 }
 
@@ -4105,19 +4138,24 @@ body {
     }
 
     .orders-bar {
-        top: 8px;
-        padding: 2px 8px;
-        scale: 0.75;
-        max-width: calc(100vw - 16px);
+        top: 0;
+        padding: 2px 6px;
+        scale: 0.7;
+        max-width: calc(100vw - 8px);
+        border-radius: 0 0 12px 12px;
+        transform: translateX(-50%);
+        transform-origin: top center;
+        gap: 3px;
     }
 
     .orders-label {
-        font-size: 9px;
+        font-size: 8px;
     }
 
     .orders-list {
-        gap: 4px;
+        gap: 3px;
         overflow-x: auto;
+        max-width: 55vw;
         -ms-overflow-style: none;
         scrollbar-width: none;
     }
@@ -4127,24 +4165,35 @@ body {
     }
 
     .order-card {
-        padding: 4px;
-        min-width: 70px;
+        padding: 3px 4px;
+        min-width: 55px;
+        border-radius: 5px;
+        border-width: 1px;
     }
 
     .order-emoji {
-        font-size: 18px;
+        font-size: 14px;
+        margin-bottom: 0;
     }
 
     .order-name {
-        font-size: 9px;
+        font-size: 7px;
+        letter-spacing: 0;
     }
 
     .order-ingredients {
-        font-size: 11px;
+        font-size: 9px;
+        margin-top: 0;
+    }
+
+    .order-timer-bar {
+        height: 2px;
+        margin-top: 1px;
     }
 
     .order-points {
-        font-size: 9px;
+        font-size: 7px;
+        margin-top: 0;
     }
 
     /* Hide chat log on mobile to save space */
@@ -4166,39 +4215,153 @@ body {
     }
 }
 
-/* Responsive quick chat sidebar */
+/* ============================================
+   MOBILE CHAT BUTTON (replaces sidebar on mobile)
+   ============================================ */
+
+/* Hide desktop sidebar on mobile */
 @media (max-width: 768px) {
     .quick-chat-sidebar {
-        right: 8px;
-        gap: 6px;
-    }
-
-    .side-chat-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 16px;
-    }
-
-    .key-hint {
-        font-size: 9px;
+        display: none !important;
     }
 }
 
-@media (max-width: 480px) {
-    .quick-chat-sidebar {
-        right: 4px;
-        gap: 4px;
-        bottom: 60px;
+/* Mobile chat container */
+.mobile-chat-container {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 160;
+    pointer-events: auto;
+    touch-action: none;
+    display: none;
+}
+
+.mobile-chat-container.active {
+    display: block;
+}
+
+/* Toggle button */
+.mobile-chat-toggle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    background: rgba(30, 41, 59, 0.9);
+    color: white;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    z-index: 2;
+}
+
+.mobile-chat-toggle:active {
+    transform: scale(0.9);
+}
+
+.mobile-chat-toggle.open {
+    background: var(--primary);
+    border-color: var(--primary);
+    transform: rotate(90deg);
+}
+
+/* Popup with quick chat options */
+.mobile-chat-popup {
+    position: absolute;
+    bottom: 56px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    align-items: flex-end;
+}
+
+.mobile-chat-popup.open {
+    pointer-events: auto;
+    opacity: 1;
+}
+
+/* Individual chat option buttons */
+.mobile-chat-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(15, 23, 42, 0.92);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transform: translateY(20px) scale(0.8);
+    opacity: 0;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) var(--delay, 0s),
+        opacity 0.2s ease var(--delay, 0s),
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.mobile-chat-popup.open .mobile-chat-option {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+}
+
+.mobile-chat-option i {
+    font-size: 16px;
+    color: var(--chat-color, white);
+}
+
+.mobile-chat-option:active,
+.mobile-chat-option.active {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: var(--chat-color, rgba(255, 255, 255, 0.3));
+    transform: scale(0.95);
+}
+
+/* Hide on desktop */
+@media (min-width: 769px) {
+    .mobile-chat-container {
+        display: none !important;
+    }
+}
+
+/* Landscape mobile adjustments */
+@media (max-width: 768px) and (orientation: landscape) {
+    .mobile-chat-container {
+        right: 12px;
     }
 
-    .side-chat-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 14px;
+    .mobile-chat-toggle {
+        width: 40px;
+        height: 40px;
+        font-size: 17px;
     }
 
-    .key-hint {
-        font-size: 8px;
+    .mobile-chat-popup {
+        bottom: 48px;
+    }
+
+    .mobile-chat-option {
+        padding: 7px 12px;
+        font-size: 11px;
+        gap: 6px;
+    }
+
+    .mobile-chat-option i {
+        font-size: 13px;
     }
 }
 
@@ -4230,67 +4393,83 @@ body {
     }
 }
 
-/* Responsive floating chat input */
+/* Responsive floating chat input - Full width bar */
 @media (max-width: 768px) {
     .floating-chat-container {
-        bottom: 15px;
-        left: 15px;
-        right: 15px;
-        max-width: calc(100vw - 30px);
+        bottom: auto;
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        max-width: none;
+        border-radius: 0;
+        border: none;
+        border-bottom: 2px solid var(--primary);
+        padding: 8px 16px;
+        background: rgba(15, 23, 42, 0.98);
+        animation: slideDownChat 0.2s ease-out;
+    }
+
+    @keyframes slideDownChat {
+        from {
+            transform: translateY(-100%);
+        }
+
+        to {
+            transform: translateY(0);
+        }
     }
 
     .floating-chat-container input {
-        font-size: 14px;
-        padding: 10px;
+        font-size: 16px;
+        /* 16px prevents iOS auto-zoom */
+        padding: 8px;
+    }
+
+    .floating-chat-container button {
+        border-radius: var(--radius-sm);
+        padding: 8px 16px;
+        width: auto;
     }
 }
 
 @media (max-width: 480px) {
     .floating-chat-container {
-        bottom: 10px;
-        left: 10px;
-        right: 10px;
-        max-width: calc(100vw - 20px);
+        padding: 6px 12px;
     }
 
     .floating-chat-container input {
-        font-size: 13px;
-        padding: 8px;
+        font-size: 16px;
+        /* Must be 16px or iOS Safari zooms in */
+        padding: 6px;
     }
 
     .floating-chat-container button {
-        padding: 8px 12px;
+        padding: 6px 14px;
     }
 }
 
 /* Responsive game over screen */
 @media (max-width: 768px) {
+    #gameover-screen {
+        padding: 10px;
+        overflow-y: auto;
+    }
+
     .gameover-container {
-        padding: 30px;
-        max-width: 90%;
-    }
-
-    .gameover-title {
-        font-size: 36px;
-    }
-
-    .final-score {
-        font-size: 64px;
-    }
-
-    .score-label-big {
-        font-size: 18px;
-    }
-}
-
-@media (max-width: 480px) {
-    .gameover-container {
-        padding: 20px;
+        padding: 20px 16px;
         max-width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
     }
 
     .gameover-title {
         font-size: 28px;
+        margin-bottom: 12px;
+    }
+
+    .gameover-score {
+        margin-bottom: 12px;
     }
 
     .final-score {
@@ -4298,24 +4477,220 @@ body {
     }
 
     .score-label-big {
-        font-size: 16px;
+        font-size: 14px;
+        letter-spacing: 2px;
+    }
+
+    .gameover-stats {
+        gap: 8px;
+        margin-bottom: 12px;
     }
 
     .stat-card {
-        padding: 12px;
+        padding: 8px 6px;
     }
 
     .stat-value {
-        font-size: 28px;
+        font-size: 22px;
     }
 
     .stat-label {
+        font-size: 9px;
+        letter-spacing: 0.5px;
+    }
+
+    .star-rating {
+        font-size: 32px;
+        margin-bottom: 14px;
+    }
+
+    .gameover-players {
+        margin-bottom: 12px;
+    }
+
+    .gameover-players .player-tag {
         font-size: 11px;
+        padding: 4px 8px;
+        margin: 2px !important;
+    }
+
+    .gameover-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
     }
 
     .btn-restart {
-        padding: 12px 24px;
+        width: 100%;
+        padding: 12px 20px;
+        font-size: 15px;
+        justify-content: center;
+    }
+
+    .btn-exit {
+        width: 100%;
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+
+    /* VS Mode adjustments */
+    .gameover-container.vs-mode {
+        max-width: 95%;
+    }
+
+    .vs-stats-container {
+        flex-direction: column;
+        gap: 10px;
+        margin: 10px 0;
+    }
+
+    .vs-stat-card {
+        max-width: 100%;
+        padding: 12px;
+        border-width: 3px;
+    }
+
+    .vs-player-name {
+        font-size: 1.2rem;
+    }
+
+    .vs-player-score {
+        font-size: 2.2rem;
+    }
+
+    .vs-score-label {
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+    }
+
+    .vs-detail-item {
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .gameover-container {
+        padding: 16px 12px;
+        max-height: 85vh;
+    }
+
+    .gameover-title {
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .gameover-score {
+        margin-bottom: 10px;
+    }
+
+    .final-score {
+        font-size: 36px;
+    }
+
+    .score-label-big {
+        font-size: 12px;
+    }
+
+    .gameover-stats {
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+
+    .stat-card {
+        padding: 6px 4px;
+    }
+
+    .stat-value {
+        font-size: 18px;
+    }
+
+    .stat-label {
+        font-size: 8px;
+    }
+
+    .star-rating {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+
+    .btn-restart {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+
+    .btn-exit {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .vs-stat-card {
+        padding: 10px;
+    }
+
+    .vs-player-name {
+        font-size: 1rem;
+    }
+
+    .vs-player-score {
+        font-size: 1.8rem;
+    }
+}
+
+/* Landscape mobile game over */
+@media (max-height: 500px) {
+    .gameover-container {
+        padding: 12px 16px;
+        max-height: 95vh;
+        overflow-y: auto;
+    }
+
+    .gameover-title {
+        font-size: 22px;
+        margin-bottom: 6px;
+    }
+
+    .gameover-score {
+        margin-bottom: 6px;
+    }
+
+    .final-score {
+        font-size: 32px;
+    }
+
+    .score-label-big {
+        font-size: 11px;
+    }
+
+    .gameover-stats {
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+
+    .stat-card {
+        padding: 4px;
+    }
+
+    .stat-value {
         font-size: 16px;
+    }
+
+    .stat-label {
+        font-size: 8px;
+    }
+
+    .star-rating {
+        font-size: 24px;
+        margin-bottom: 8px;
+    }
+
+    .gameover-players {
+        margin-bottom: 8px;
+    }
+
+    .btn-restart {
+        padding: 8px 16px;
+        font-size: 13px;
     }
 }
 
@@ -5766,18 +6141,24 @@ body {
 }
 
 @keyframes rotateIcon {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: rotate(0deg);
     }
+
     50% {
         transform: rotate(90deg);
     }
 }
 
 @keyframes rotatePrompt {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 1;
     }
+
     50% {
         opacity: 0.7;
     }
@@ -5828,9 +6209,12 @@ body {
 }
 
 @keyframes pulseFullscreen {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 8px 30px rgba(255, 107, 53, 0.6), 0 0 0 0 rgba(255, 210, 63, 0.7);
     }
+
     50% {
         box-shadow: 0 8px 30px rgba(255, 107, 53, 0.6), 0 0 0 20px rgba(255, 210, 63, 0);
     }
@@ -5841,6 +6225,7 @@ body {
    ============================================ */
 
 @media (max-width: 768px) and (orientation: portrait) {
+
     /* Optimize lobby for portrait */
     .lobby-container {
         padding: 10px;
@@ -6008,6 +6393,7 @@ body {
    ============================================ */
 
 @media (max-width: 926px) and (orientation: landscape) {
+
     /* Disable scrolling - fit everything on screen */
     body {
         overflow: hidden;
@@ -6871,6 +7257,7 @@ body {
    ============================================ */
 
 @media (max-width: 926px) and (orientation: landscape) {
+
     /* Optimize HUD for landscape mobile */
     .hud {
         padding: 8px 12px;
@@ -6934,47 +7321,57 @@ body {
 
     /* Compact Orders Bar */
     .orders-bar {
-        top: 10px;
-        padding: 3px 10px;
-        scale: 0.85;
+        top: 2px;
+        padding: 2px 8px;
+        scale: 0.75;
+        border-radius: 16px;
+        gap: 3px;
     }
 
     .orders-label {
-        font-size: 12px;
+        font-size: 9px;
+    }
+
+    .orders-list {
+        gap: 4px;
+        max-width: 50vw;
     }
 
     .order-card {
-        padding: 8px 10px;
-        min-width: 100px;
+        padding: 4px 6px;
+        min-width: 60px;
+        border-radius: 5px;
+        border-width: 1px;
     }
 
     .order-emoji {
-        font-size: 24px;
+        font-size: 16px;
+        margin-bottom: 1px;
     }
 
     .order-name {
-        font-size: 10px;
+        font-size: 8px;
+        letter-spacing: 0;
     }
 
     .order-ingredients {
-        font-size: 14px;
+        font-size: 10px;
+        margin-top: 1px;
+    }
+
+    .order-timer-bar {
+        height: 2px;
+        margin-top: 1px;
     }
 
     .order-points {
-        font-size: 10px;
+        font-size: 8px;
+        margin-top: 1px;
     }
 
-    /* Compact Quick Chat Sidebar */
+    /* Hide Quick Chat Sidebar on mobile (replaced by mobile chat button) */
     .quick-chat-sidebar {
-        right: 12px;
-        padding: 6px;
-        gap: 6px;
-    }
-
-    .side-chat-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 16px;
+        display: none !important;
     }
 
     .side-chat-btn .key-hint {
@@ -7106,6 +7503,7 @@ body {
    ============================================ */
 
 @media (max-width: 480px) {
+
     /* Portrait Mode Adjustments */
     .lobby-container {
         width: 98%;
@@ -7215,6 +7613,7 @@ body {
    ============================================ */
 
 @media (hover: none) and (pointer: coarse) {
+
     /* Increase touch targets */
     .menu-btn,
     .btn-primary,
@@ -7311,7 +7710,8 @@ body {
     position: fixed;
     bottom: 0;
     left: 0;
-    width: 50%; /* Left half of screen */
+    width: 50%;
+    /* Left half of screen */
     height: 100%;
     z-index: 150;
     pointer-events: auto;
@@ -7330,13 +7730,13 @@ body {
     width: 140px;
     height: 140px;
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, 
-        rgba(255, 255, 255, 0.15) 0%, 
-        rgba(255, 255, 255, 0.08) 40%, 
-        rgba(0, 0, 0, 0.2) 100%);
+    background: radial-gradient(circle at 30% 30%,
+            rgba(255, 255, 255, 0.15) 0%,
+            rgba(255, 255, 255, 0.08) 40%,
+            rgba(0, 0, 0, 0.2) 100%);
     border: 4px solid rgba(255, 255, 255, 0.25);
     backdrop-filter: blur(15px);
-    box-shadow: 
+    box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.4),
         inset 0 2px 10px rgba(255, 255, 255, 0.15),
         inset 0 -2px 10px rgba(0, 0, 0, 0.3);
@@ -7356,34 +7756,24 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 56px; /* 20% of 140px base = 28px radius = 56px diameter */
+    width: 56px;
+    /* 20% of 140px base = 28px radius = 56px diameter */
     height: 56px;
     border-radius: 50%;
     background: radial-gradient(circle at center,
-        rgba(255, 255, 255, 0.25) 0%,
-        rgba(255, 255, 255, 0.1) 50%,
-        transparent 100%);
+            rgba(255, 255, 255, 0.25) 0%,
+            rgba(255, 255, 255, 0.1) 50%,
+            transparent 100%);
     transform: translate(-50%, -50%);
     border: 2px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 
+    box-shadow:
         inset 0 2px 5px rgba(255, 255, 255, 0.2),
         inset 0 -2px 5px rgba(0, 0, 0, 0.2);
 }
 
-/* Directional cross indicators */
+/* Directional cross indicators - REMOVED for cleaner look */
 .joystick-base::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 100%;
-    height: 100%;
-    transform: translate(-50%, -50%);
-    background: 
-        linear-gradient(0deg, transparent 47%, rgba(255, 255, 255, 0.1) 47%, rgba(255, 255, 255, 0.1) 53%, transparent 53%),
-        linear-gradient(90deg, transparent 47%, rgba(255, 255, 255, 0.1) 47%, rgba(255, 255, 255, 0.1) 53%, transparent 53%);
-    border-radius: 50%;
-    pointer-events: none;
+    display: none;
 }
 
 .joystick-stick {
@@ -7393,12 +7783,12 @@ body {
     width: 70px;
     height: 70px;
     border-radius: 50%;
-    background: linear-gradient(135deg, 
-        rgba(255, 107, 53, 1) 0%, 
-        rgba(255, 140, 66, 1) 50%,
-        rgba(255, 107, 53, 0.9) 100%);
+    background: linear-gradient(135deg,
+            rgba(255, 107, 53, 1) 0%,
+            rgba(255, 140, 66, 1) 50%,
+            rgba(255, 107, 53, 0.9) 100%);
     border: 4px solid rgba(255, 255, 255, 0.6);
-    box-shadow: 
+    box-shadow:
         0 6px 20px rgba(255, 107, 53, 0.6),
         0 0 30px rgba(255, 107, 53, 0.3),
         inset 0 3px 8px rgba(255, 255, 255, 0.4),
@@ -7418,9 +7808,9 @@ body {
     height: 30px;
     border-radius: 50%;
     background: radial-gradient(circle at 30% 30%,
-        rgba(255, 255, 255, 0.6) 0%,
-        rgba(255, 255, 255, 0.2) 50%,
-        transparent 100%);
+            rgba(255, 255, 255, 0.6) 0%,
+            rgba(255, 255, 255, 0.2) 50%,
+            transparent 100%);
     transform: translate(0, 0);
 }
 
@@ -7434,9 +7824,9 @@ body {
     height: 85px;
     border-radius: 50%;
     background: radial-gradient(circle at center,
-        transparent 60%,
-        rgba(255, 107, 53, 0.3) 70%,
-        transparent 100%);
+            transparent 60%,
+            rgba(255, 107, 53, 0.3) 70%,
+            transparent 100%);
     transform: translate(-50%, -50%);
     opacity: 0;
     transition: opacity 0.2s ease;
@@ -7449,10 +7839,13 @@ body {
 }
 
 @keyframes joystickGlow {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translate(-50%, -50%) scale(1);
         opacity: 0.6;
     }
+
     50% {
         transform: translate(-50%, -50%) scale(1.2);
         opacity: 0.3;
@@ -7461,7 +7854,7 @@ body {
 
 /* Active state glow */
 .virtual-joystick-container.touching .joystick-stick {
-    box-shadow: 
+    box-shadow:
         0 6px 25px rgba(255, 107, 53, 0.8),
         0 0 40px rgba(255, 107, 53, 0.5),
         inset 0 3px 8px rgba(255, 255, 255, 0.4),
@@ -7474,10 +7867,13 @@ body {
 }
 
 @keyframes joystickIdlePulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0.3;
         transform: translate(-50%, -50%) scale(1);
     }
+
     50% {
         opacity: 0.5;
         transform: translate(-50%, -50%) scale(1.05);
@@ -7556,9 +7952,11 @@ body {
         opacity: 0;
         transform: translate(-50%, -50%) scale(0.5);
     }
+
     60% {
         transform: translate(-50%, -50%) scale(1.1);
     }
+
     100% {
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
@@ -7571,13 +7969,13 @@ body {
 
 
 /* ============================================
-   MOBILE ACTION BUTTON (Right Side) - UNIFIED
+   MOBILE ACTION BUTTONS (Right Side) - TWO BUTTONS
    ============================================ */
 
 .mobile-action-buttons {
     position: fixed;
-    bottom: 80px; /* Adjusted - not too high, not too low */
-    right: 80px;
+    bottom: 60px;
+    right: 60px;
     display: none;
     z-index: 150;
     pointer-events: auto;
@@ -7588,44 +7986,76 @@ body {
     display: block;
 }
 
+/* Main action button (interact/chop) */
 .action-btn {
-    width: 90px;
-    height: 90px;
     border-radius: 50%;
-    border: 4px solid rgba(255, 255, 255, 0.6);
-    background: linear-gradient(135deg, #FFD23F 0%, #FFB020 100%);
+    border: 3px solid rgba(255, 255, 255, 0.6);
     color: white;
-    font-size: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 
-        0 6px 25px rgba(255, 210, 63, 0.7),
-        inset 0 3px 8px rgba(255, 255, 255, 0.3);
     transition: all 0.15s ease;
-    position: relative;
+    position: absolute;
+}
+
+.action-btn-unified {
+    width: 85px;
+    height: 85px;
+    font-size: 34px;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(135deg, #FFD23F 0%, #FFB020 100%);
+    box-shadow:
+        0 5px 20px rgba(255, 210, 63, 0.6),
+        inset 0 2px 6px rgba(255, 255, 255, 0.3);
+}
+
+/* Throw button - positioned above-left */
+.action-btn-throw {
+    width: 60px;
+    height: 60px;
+    font-size: 22px;
+    bottom: 85px;
+    right: 75px;
+    background: linear-gradient(135deg, #6C63FF 0%, #4FC3F7 100%);
+    box-shadow:
+        0 4px 15px rgba(108, 99, 255, 0.5),
+        inset 0 2px 5px rgba(255, 255, 255, 0.2);
+    border-width: 2px;
 }
 
 .action-btn:active,
 .action-btn.active {
-    transform: scale(0.9);
+    transform: scale(0.88);
+}
+
+.action-btn-unified:active,
+.action-btn-unified.active {
     box-shadow: 0 3px 15px rgba(255, 210, 63, 0.9);
 }
 
-/* Holding state - changes to orange */
+.action-btn-throw:active,
+.action-btn-throw.active {
+    box-shadow: 0 3px 15px rgba(108, 99, 255, 0.9);
+}
+
+/* Holding state - main button turns orange */
 .action-btn.holding {
     background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
-    box-shadow: 
+    box-shadow:
         0 6px 25px rgba(255, 107, 53, 0.8),
         inset 0 3px 8px rgba(255, 255, 255, 0.3);
     animation: holdPulse 0.6s ease-in-out infinite;
 }
 
 @keyframes holdPulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(0.9);
     }
+
     50% {
         transform: scale(0.95);
     }
@@ -7634,27 +8064,43 @@ body {
 /* Responsive */
 @media (max-width: 768px) and (orientation: landscape) {
     .mobile-action-buttons {
-        bottom: 70px;
-        right: 70px;
+        bottom: 50px;
+        right: 50px;
     }
 
-    .action-btn {
-        width: 80px;
-        height: 80px;
-        font-size: 32px;
+    .action-btn-unified {
+        width: 75px;
+        height: 75px;
+        font-size: 30px;
+    }
+
+    .action-btn-throw {
+        width: 55px;
+        height: 55px;
+        font-size: 20px;
+        bottom: 75px;
+        right: 65px;
     }
 }
 
 @media (max-width: 480px) and (orientation: landscape) {
     .mobile-action-buttons {
-        bottom: 60px;
-        right: 60px;
+        bottom: 40px;
+        right: 40px;
     }
 
-    .action-btn {
-        width: 70px;
-        height: 70px;
-        font-size: 28px;
+    .action-btn-unified {
+        width: 65px;
+        height: 65px;
+        font-size: 26px;
+    }
+
+    .action-btn-throw {
+        width: 48px;
+        height: 48px;
+        font-size: 18px;
+        bottom: 65px;
+        right: 55px;
     }
 }
 
@@ -7698,7 +8144,7 @@ body {
     width: 90%;
     max-width: 320px;
     z-index: 3000;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
 }
 
@@ -7708,7 +8154,7 @@ body {
 }
 
 .mini-modal-header {
-    background: rgba(0,0,0,0.3);
+    background: rgba(0, 0, 0, 0.3);
     padding: 12px 16px;
     border-top-left-radius: 20px;
     border-top-right-radius: 20px;
@@ -7743,7 +8189,7 @@ body {
 .mini-modal-body input {
     width: 100%;
     padding: 10px 14px;
-    background: rgba(0,0,0,0.4);
+    background: rgba(0, 0, 0, 0.4);
     border: 1px solid var(--border);
     border-radius: 10px;
     color: white;

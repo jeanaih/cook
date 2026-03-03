@@ -77,20 +77,11 @@ export class UIManager {
             card.className = 'order-card';
             card.id = `order-${order.id}`;
 
-            const now = Date.now();
-            const total = order.expiresAt - order.createdAt;
-            const remaining = Math.max(0, order.expiresAt - now);
-            const pct = (remaining / total) * 100;
-            if (pct < 30) card.classList.add('urgent');
-
             const ings = recipe.ingredients.map(i => config.INGREDIENTS[i]?.emoji || '').join('');
             card.innerHTML = `
                 <span class="order-emoji">${recipe.emoji || '<i class="bi bi-egg-fried"></i>'}</span>
                 <div class="order-name">${recipe.name}</div>
                 <div class="order-ingredients">${ings}</div>
-                <div class="order-timer-bar">
-                    <div class="order-timer-fill ${pct < 30 ? 'low' : ''}" style="width:${pct}%"></div>
-                </div>
                 <div class="order-points"><i class="bi bi-star-fill"></i> +${order.points} pts</div>
             `;
             list.appendChild(card);
@@ -98,22 +89,7 @@ export class UIManager {
     }
 
     updateOrderTimers(orders) {
-        const now = Date.now();
-        orders.forEach(order => {
-            const card = document.getElementById(`order-${order.id}`);
-            if (!card) return;
-            const total = order.expiresAt - order.createdAt;
-            const remaining = Math.max(0, order.expiresAt - now);
-            const pct = (remaining / total) * 100;
-            const fill = card.querySelector('.order-timer-fill');
-            if (fill) {
-                fill.style.width = `${pct}%`;
-                if (pct < 30) {
-                    fill.classList.add('low');
-                    card.classList.add('urgent');
-                }
-            }
-        });
+        // No-op: orders no longer have timers
     }
 
     updateScore(score, combo) {

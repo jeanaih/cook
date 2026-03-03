@@ -181,7 +181,7 @@ window.showMenu = (menuId) => {
     const logoContainer = document.querySelector('.logo-container');
     const userProfile = document.getElementById('user-profile');
     const connectionStatus = document.getElementById('connection-status');
-    
+
     if (menuId === 'main') {
         // Show on main menu
         if (logoContainer) logoContainer.style.display = '';
@@ -482,7 +482,7 @@ socket.on('loginSuccess', (user) => {
 
 socket.on('loginError', (data) => {
     showNotif('Login/Auth Error', data.msg, 'error');
-    
+
     // Clear invalid localStorage if server requests it
     if (data.clearStorage) {
         console.log('🗑️ Clearing invalid stored credentials');
@@ -2813,6 +2813,9 @@ window.togglePauseMenu = () => {
         // OPEN MENU
         pauseMenu.classList.remove('hidden');
 
+        const camSelect = document.getElementById('camera-height-setting');
+        if (camSelect) camSelect.value = window.cameraSettingHeight;
+
         const resumeBtn = document.getElementById('btn-resume');
         const title = pauseMenu.querySelector('h2');
 
@@ -3137,8 +3140,8 @@ function updateDroppedItemMesh(itemId, x, y, z) {
         mesh.position.set(x, y, z);
         // Spin while moving/bouncing
         if (y > 0.1) {
-            mesh.rotation.x += 0.1;
-            mesh.rotation.z += 0.1;
+            mesh.rotation.x += 0.3;
+            mesh.rotation.z += 0.3;
         } else {
             // Settle out rotation flatly
             mesh.rotation.x *= 0.8;
@@ -3701,9 +3704,15 @@ function animate() {
         const pm = playerMeshes[playerId];
 
         // Define desired camera offset relative to player
-        // High angle, centered
-        const targetHeight = 22;
-        const targetDist = 20;
+
+        // Mode defaults
+        let targetHeight = 22;
+        let targetDist = 20;
+
+        if (window.cameraSettingHeight === 'low') {
+            targetHeight = 12; // Much closer to the ground
+            targetDist = 14;   // Closer to the player
+        }
 
         const targetX = pm.group.position.x;
         const targetZ = pm.group.position.z + targetDist;
@@ -3728,6 +3737,12 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+window.cameraSettingHeight = localStorage.getItem('cameraHeight') || (window.innerWidth <= 768 ? 'low' : 'high');
+window.setCameraHeight = (mode) => {
+    window.cameraSettingHeight = mode;
+    localStorage.setItem('cameraHeight', mode);
+};
 
 // Click to interact with stations
 canvas.addEventListener('click', (e) => {
@@ -3802,6 +3817,7 @@ window.sendQuickChat = (msg) => {
 };
 
 window.toggleChatInput = () => {
+
     const container = document.getElementById('floating-chat-input');
     const input = document.getElementById('chat-input');
     if (container && input) {
@@ -4510,6 +4526,64 @@ function createHeldPlate(group, content) {
         // Add steam if cooked
         if (content.cooked && content.cooked.length > 0 && !content.burnt) {
             addHeldSteam(group);
+        }
+
+        // --- SUGGEST NEXT INGREDIENT (Floating Sprite) FOR HELD PLATE ---
+        const isRecipe = Object.values(gameConfig.RECIPES).some(r => {
+            const rIngs = [...r.ingredients].sort();
+            const pIngs = [...ings].sort();
+            return rIngs.length === pIngs.length && rIngs.every((v, i) => v === pIngs[i]);
+        });
+
+        if (gameConfig && gameConfig.RECIPES) {
+            if (!isRecipe && !content.burnt && ings.length > 0) {
+                let bestMissing = null;
+                for (const [, recipe] of Object.entries(gameConfig.RECIPES)) {
+                    const required = recipe.ingredients;
+                    if (ings.every(ing => required.includes(ing)) && ings.length < required.length) {
+                        bestMissing = required.find(ing => !ings.includes(ing));
+                        break;
+                    }
+                }
+
+                if (bestMissing && gameConfig.INGREDIENTS) {
+                    const ingConfig = gameConfig.INGREDIENTS[bestMissing];
+                    if (ingConfig) {
+                        const iconStr = ingConfig.emoji || bestMissing;
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 128; canvas.height = 128;
+                        const ctx = canvas.getContext('2d');
+
+                        // Bubble background
+                        ctx.fillStyle = 'rgba(20, 20, 20, 0.65)';
+                        ctx.beginPath();
+                        ctx.arc(64, 64, 54, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Border
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.lineWidth = 4;
+                        ctx.stroke();
+
+                        // Emoji text
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 44px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(`+ ${iconStr}`, 64, 70);
+
+                        const tex = new THREE.CanvasTexture(canvas);
+                        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+                        const sprite = new THREE.Sprite(mat);
+
+                        sprite.position.set(0, 0.35, 0);
+                        sprite.scale.set(0.4, 0.4, 0.4);
+
+                        group.add(sprite);
+                    }
+                }
+            }
         }
     }
 }

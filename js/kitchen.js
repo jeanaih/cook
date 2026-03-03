@@ -691,34 +691,34 @@ export class KitchenRenderer {
                 canvas.width = 256;
                 canvas.height = 256;
                 const ctx = canvas.getContext('2d');
-                
+
                 // White circular background
                 ctx.fillStyle = '#FFFFFF';
                 ctx.beginPath();
                 ctx.arc(128, 128, 110, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 // Border (metallic silver for freezer)
                 ctx.strokeStyle = '#C0C0C0';
                 ctx.lineWidth = 8;
                 ctx.stroke();
-                
+
                 // Draw emoji
                 ctx.font = 'bold 140px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(ing.emoji, 128, 140);
-                
+
                 // Create texture and material
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.needsUpdate = true;
-                const stickerMat = new THREE.MeshStandardMaterial({ 
+                const stickerMat = new THREE.MeshStandardMaterial({
                     map: texture,
                     transparent: true,
                     roughness: 0.3,
                     metalness: 0.2
                 });
-                
+
                 // Create sticker mesh (circular)
                 const stickerSize = sz * 0.5;
                 const sticker = new THREE.Mesh(
@@ -762,14 +762,14 @@ export class KitchenRenderer {
                 onion: { wood: 0xF5DEB3, dark: 0xD2B48C, plank: 0xE3C9A0 }, // Wheat/beige
                 mushroom: { wood: 0xE8B4B8, dark: 0xD89CA0, plank: 0xE0A8AC }  // Light pink
             };
-            
+
             const colors = crateColors[st.ingredient] || { wood: 0xA0724A, dark: 0x7B5B3A, plank: 0x8B6F47 };
 
             // Wooden crate materials with ingredient-specific colors
             const woodMat = new THREE.MeshStandardMaterial({ color: colors.wood, roughness: 0.85 });
             const darkWoodMat = new THREE.MeshStandardMaterial({ color: colors.dark, roughness: 0.9 });
             const plankMat = new THREE.MeshStandardMaterial({ color: colors.plank, roughness: 0.9 });
-            
+
             const crateW = this.ts * 0.85;
             const crateH = 0.9; // Match counter height
             const crateD = this.ts * 0.85;
@@ -798,7 +798,7 @@ export class KitchenRenderer {
             // Decorative slats on exterior (vertical planks with gaps)
             const slatsPerSide = 5;
             const slotWidth = crateW / slatsPerSide;
-            
+
             // Front and back decorative slats
             for (let i = 0; i < slatsPerSide; i++) {
                 // Front
@@ -867,7 +867,7 @@ export class KitchenRenderer {
             const doorGroup = new THREE.Group();
             doorGroup.name = 'crateDoor';
             doorGroup.position.set(0, crateH, -crateD * 0.42); // Pivot at back edge
-            
+
             // Door frame (thick border)
             const frameThickness = 0.08;
             doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, 0, darkWoodMat)); // back (at pivot)
@@ -888,10 +888,10 @@ export class KitchenRenderer {
             }
 
             // Metal hinges (at back)
-            const hingeMat = new THREE.MeshStandardMaterial({ 
-                color: 0x444444, 
-                roughness: 0.4, 
-                metalness: 0.8 
+            const hingeMat = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.4,
+                metalness: 0.8
             });
             [-0.28, 0.28].forEach(xPos => {
                 const hinge = new THREE.Mesh(
@@ -904,10 +904,10 @@ export class KitchenRenderer {
             });
 
             // Handle (metal bar at front)
-            const handleMat = new THREE.MeshStandardMaterial({ 
-                color: 0x666666, 
-                metalness: 0.85, 
-                roughness: 0.15 
+            const handleMat = new THREE.MeshStandardMaterial({
+                color: 0x666666,
+                metalness: 0.85,
+                roughness: 0.15
             });
             const handle = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.02, 0.02, crateW * 0.6, 12),
@@ -926,34 +926,34 @@ export class KitchenRenderer {
                 canvas.width = 256;
                 canvas.height = 256;
                 const ctx = canvas.getContext('2d');
-                
+
                 // White circular background
                 ctx.fillStyle = '#FFFFFF';
                 ctx.beginPath();
                 ctx.arc(128, 128, 110, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 // Border
                 ctx.strokeStyle = '#8B6F47';
                 ctx.lineWidth = 8;
                 ctx.stroke();
-                
+
                 // Draw emoji
                 ctx.font = 'bold 140px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(ing.emoji, 128, 140);
-                
+
                 // Create texture and material
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.needsUpdate = true;
-                const stickerMat = new THREE.MeshStandardMaterial({ 
+                const stickerMat = new THREE.MeshStandardMaterial({
                     map: texture,
                     transparent: true,
                     roughness: 0.6,
                     metalness: 0.1
                 });
-                
+
                 // Create sticker mesh (circular)
                 const stickerSize = crateW * 0.35;
                 const sticker = new THREE.Mesh(
@@ -974,7 +974,7 @@ export class KitchenRenderer {
                 onion: 0xF5DEB3,
                 mushroom: 0xD2B48C
             }[st.ingredient] || 0xFFFFFF;
-            
+
             const light = new THREE.PointLight(ingredientColor, 0, 2);
             light.position.set(0, crateH * 0.8, 0);
             crateGroup.add(light);
@@ -1005,14 +1005,14 @@ export class KitchenRenderer {
                 egg: { wood: 0xFFFACD, dark: 0xFFEFD5, plank: 0xFFF5E1 }, // Lemon chiffon
                 cheese: { wood: 0xFFD700, dark: 0xDAA520, plank: 0xF0C040 }  // Gold/yellow
             };
-            
+
             const colors = crateColors[st.ingredient] || crateColors.tomato;
 
             // Wooden crate materials with ingredient-specific colors
             const woodMat = new THREE.MeshStandardMaterial({ color: colors.wood, roughness: 0.85 });
             const darkWoodMat = new THREE.MeshStandardMaterial({ color: colors.dark, roughness: 0.9 });
             const plankMat = new THREE.MeshStandardMaterial({ color: colors.plank, roughness: 0.9 });
-            
+
             const crateW = this.ts * 0.85;
             const crateH = 0.9; // Match counter height
             const crateD = this.ts * 0.85;
@@ -1041,7 +1041,7 @@ export class KitchenRenderer {
             // Decorative slats on exterior (vertical planks with gaps)
             const slatsPerSide = 5;
             const slotWidth = crateW / slatsPerSide;
-            
+
             // Front and back decorative slats
             for (let i = 0; i < slatsPerSide; i++) {
                 // Front
@@ -1110,7 +1110,7 @@ export class KitchenRenderer {
             const doorGroup = new THREE.Group();
             doorGroup.name = 'crateDoor';
             doorGroup.position.set(0, crateH, -crateD * 0.42); // Pivot at back edge
-            
+
             // Door frame (thick border)
             const frameThickness = 0.08;
             doorGroup.add(createWall(crateW, frameThickness, plankThickness * 2, 0, frameThickness / 2, 0, darkWoodMat)); // back (at pivot)
@@ -1131,10 +1131,10 @@ export class KitchenRenderer {
             }
 
             // Metal hinges (at back)
-            const hingeMat = new THREE.MeshStandardMaterial({ 
-                color: 0x444444, 
-                roughness: 0.4, 
-                metalness: 0.8 
+            const hingeMat = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.4,
+                metalness: 0.8
             });
             [-0.28, 0.28].forEach(xPos => {
                 const hinge = new THREE.Mesh(
@@ -1147,10 +1147,10 @@ export class KitchenRenderer {
             });
 
             // Handle (metal bar at front)
-            const handleMat = new THREE.MeshStandardMaterial({ 
-                color: 0x666666, 
-                metalness: 0.85, 
-                roughness: 0.15 
+            const handleMat = new THREE.MeshStandardMaterial({
+                color: 0x666666,
+                metalness: 0.85,
+                roughness: 0.15
             });
             const handle = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.02, 0.02, crateW * 0.6, 12),
@@ -1169,34 +1169,34 @@ export class KitchenRenderer {
                 canvas.width = 256;
                 canvas.height = 256;
                 const ctx = canvas.getContext('2d');
-                
+
                 // White circular background
                 ctx.fillStyle = '#FFFFFF';
                 ctx.beginPath();
                 ctx.arc(128, 128, 110, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 // Border
                 ctx.strokeStyle = '#8B6F47';
                 ctx.lineWidth = 8;
                 ctx.stroke();
-                
+
                 // Draw emoji
                 ctx.font = 'bold 140px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(ing.emoji, 128, 140);
-                
+
                 // Create texture and material
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.needsUpdate = true;
-                const stickerMat = new THREE.MeshStandardMaterial({ 
+                const stickerMat = new THREE.MeshStandardMaterial({
                     map: texture,
                     transparent: true,
                     roughness: 0.6,
                     metalness: 0.1
                 });
-                
+
                 // Create sticker mesh (circular)
                 const stickerSize = crateW * 0.35;
                 const sticker = new THREE.Mesh(
@@ -1222,7 +1222,7 @@ export class KitchenRenderer {
                 egg: 0xFFF8DC,
                 cheese: 0xFFD700
             }[st.ingredient] || 0xFFFFFF;
-            
+
             const light = new THREE.PointLight(ingredientColor, 0, 2);
             light.position.set(0, crateH * 0.8, 0);
             crateGroup.add(light);
@@ -1307,7 +1307,7 @@ export class KitchenRenderer {
                 ctx.fillText(ing.emoji, 128, 140);
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.needsUpdate = true;
-                const stickerMat = new THREE.MeshStandardMaterial({ 
+                const stickerMat = new THREE.MeshStandardMaterial({
                     map: texture,
                     transparent: true,
                     roughness: 0.6,
@@ -1977,16 +1977,16 @@ export class KitchenRenderer {
 
                 } else if (isRiceCrate) {
                     // --- RICE CRATE CONTENTS: Sand-like white powder filling the box ---
-                    const riceMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFF8E7, 
+                    const riceMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFF8E7,
                         roughness: 0.95,
                         metalness: 0.0
                     });
-                    
+
                     // Create a solid base layer (sand-like surface)
                     const boxSz = this.ts * 0.35;
                     const fillHeight = 0.42; // Fill most of the crate
-                    
+
                     // Main rice mass (solid block with rounded top)
                     const riceBase = new THREE.Mesh(
                         new THREE.BoxGeometry(boxSz * 1.6, fillHeight, boxSz * 1.6),
@@ -1994,7 +1994,7 @@ export class KitchenRenderer {
                     );
                     riceBase.position.y = fillHeight / 2 + 0.05;
                     ingGroup.add(riceBase);
-                    
+
                     // Rounded top surface (mound effect)
                     const moundTop = new THREE.Mesh(
                         new THREE.SphereGeometry(boxSz * 0.9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -2003,7 +2003,7 @@ export class KitchenRenderer {
                     moundTop.position.y = fillHeight + 0.05;
                     moundTop.scale.y = 0.3; // Flatten it
                     ingGroup.add(moundTop);
-                    
+
                     // Add texture with many tiny grains on surface
                     const grainCount = 300;
                     for (let g = 0; g < grainCount; g++) {
@@ -2012,28 +2012,28 @@ export class KitchenRenderer {
                             riceMat
                         );
                         grain.scale.set(0.5, 1.2, 0.5);
-                        
+
                         // Scatter on top surface
                         const angle = Math.random() * Math.PI * 2;
                         const radius = Math.random() * boxSz * 0.8;
                         const x = Math.cos(angle) * radius;
                         const z = Math.sin(angle) * radius;
-                        
+
                         // Height follows the mound curve
                         const distFromCenter = Math.sqrt(x * x + z * z);
                         const moundHeight = Math.max(0, 1 - (distFromCenter / (boxSz * 0.8))) * 0.08;
                         const y = fillHeight + 0.05 + moundHeight + (Math.random() * 0.015);
-                        
+
                         grain.position.set(x, y, z);
                         grain.rotation.set(
                             Math.random() * Math.PI,
                             Math.random() * Math.PI,
                             Math.random() * Math.PI
                         );
-                        
+
                         ingGroup.add(grain);
                     }
-                    
+
                     // Add small clumps for texture variation
                     for (let c = 0; c < 15; c++) {
                         const clump = new THREE.Mesh(
@@ -2046,7 +2046,7 @@ export class KitchenRenderer {
                         const z = Math.sin(angle) * radius;
                         const distFromCenter = Math.sqrt(x * x + z * z);
                         const moundHeight = Math.max(0, 1 - (distFromCenter / (boxSz * 0.75))) * 0.08;
-                        
+
                         clump.position.set(
                             x,
                             fillHeight + 0.05 + moundHeight + (Math.random() * 0.02),
@@ -2058,28 +2058,28 @@ export class KitchenRenderer {
 
                 } else if (isDoughCrate) {
                     // --- DOUGH CRATE CONTENTS: Stacked layers of dough balls ---
-                    const doughMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xF5DEB3, 
+                    const doughMat = new THREE.MeshStandardMaterial({
+                        color: 0xF5DEB3,
                         roughness: 0.95,
                         metalness: 0.0
                     });
-                    
-                    const flourMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFFFF0, 
+
+                    const flourMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFFFF0,
                         roughness: 1.0,
                         transparent: true,
                         opacity: 0.6
                     });
-                    
+
                     const boxSz = this.ts * 0.35;
-                    
+
                     // Create stacked layers of dough balls
                     const layers = 3;
                     const ballsPerLayer = 4;
-                    
+
                     for (let layer = 0; layer < layers; layer++) {
                         const layerY = 0.12 + layer * 0.14;
-                        
+
                         for (let b = 0; b < ballsPerLayer; b++) {
                             // Dough ball
                             const doughBall = new THREE.Mesh(
@@ -2087,19 +2087,19 @@ export class KitchenRenderer {
                                 doughMat
                             );
                             doughBall.scale.set(1, 0.7, 1); // Slightly flattened
-                            
+
                             // Arrange in a pattern
                             const angle = (b / ballsPerLayer) * Math.PI * 2 + (layer * 0.5);
                             const radius = layer === 0 ? 0.15 : (layer === 1 ? 0.1 : 0.05);
-                            
+
                             doughBall.position.set(
                                 Math.cos(angle) * radius,
                                 layerY,
                                 Math.sin(angle) * radius
                             );
-                            
+
                             ingGroup.add(doughBall);
-                            
+
                             // Add flour dusting on each ball
                             for (let f = 0; f < 3; f++) {
                                 const flour = new THREE.Mesh(
@@ -2116,7 +2116,7 @@ export class KitchenRenderer {
                             }
                         }
                     }
-                    
+
                     // Add one large dough ball on top
                     const topDough = new THREE.Mesh(
                         new THREE.SphereGeometry(0.13, 14, 12),
@@ -2125,7 +2125,7 @@ export class KitchenRenderer {
                     topDough.scale.set(1, 0.65, 1);
                     topDough.position.y = 0.12 + layers * 0.14;
                     ingGroup.add(topDough);
-                    
+
                     // Extra flour on top
                     for (let f = 0; f < 5; f++) {
                         const flour = new THREE.Mesh(
@@ -2145,30 +2145,30 @@ export class KitchenRenderer {
 
                 } else if (isBreadCrate) {
                     // --- BREAD CRATE CONTENTS: Scattered burger buns ---
-                    const breadMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xC8860A, 
+                    const breadMat = new THREE.MeshStandardMaterial({
+                        color: 0xC8860A,
                         roughness: 0.85,
                         metalness: 0.0
                     });
-                    
-                    const topMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xA0690A, 
+
+                    const topMat = new THREE.MeshStandardMaterial({
+                        color: 0xA0690A,
                         roughness: 0.9
                     });
-                    
-                    const seedMat = new THREE.MeshStandardMaterial({ 
+
+                    const seedMat = new THREE.MeshStandardMaterial({
                         color: 0xFFFACD,
                         roughness: 0.8
                     });
-                    
+
                     const boxSz = this.ts * 0.35;
-                    
+
                     // Create scattered burger buns filling the crate
                     const bunCount = 12;
-                    
+
                     for (let b = 0; b < bunCount; b++) {
                         const bunGroup = new THREE.Group();
-                        
+
                         // Bun body (round, slightly flattened)
                         const bun = new THREE.Mesh(
                             new THREE.SphereGeometry(0.09, 16, 12),
@@ -2176,7 +2176,7 @@ export class KitchenRenderer {
                         );
                         bun.scale.set(1, 0.6, 1);
                         bunGroup.add(bun);
-                        
+
                         // Darker top crust
                         const top = new THREE.Mesh(
                             new THREE.SphereGeometry(0.088, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -2185,7 +2185,7 @@ export class KitchenRenderer {
                         top.position.y = 0.02;
                         top.scale.y = 0.5;
                         bunGroup.add(top);
-                        
+
                         // Sesame seeds on top
                         const seedCount = 6 + Math.floor(Math.random() * 4);
                         for (let s = 0; s < seedCount; s++) {
@@ -2202,58 +2202,58 @@ export class KitchenRenderer {
                             );
                             bunGroup.add(seed);
                         }
-                        
+
                         // Random position in crate (scattered)
                         const layer = Math.floor(b / 4);
                         const angle = Math.random() * Math.PI * 2;
                         const radius = Math.random() * boxSz * 0.8;
-                        
+
                         bunGroup.position.set(
                             Math.cos(angle) * radius,
                             0.1 + layer * 0.12,
                             Math.sin(angle) * radius
                         );
                         bunGroup.rotation.y = Math.random() * Math.PI * 2;
-                        
+
                         ingGroup.add(bunGroup);
                     }
 
                 } else if (isCheeseCrate) {
                     // --- CHEESE CRATE CONTENTS: Giant cheese wedge (3D model style) ---
-                    const cheeseMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFD700, 
+                    const cheeseMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFD700,
                         roughness: 0.7,
                         metalness: 0.0
                     });
-                    
-                    const crustMat = new THREE.MeshStandardMaterial({ 
+
+                    const crustMat = new THREE.MeshStandardMaterial({
                         color: 0xDAA520,
                         roughness: 0.8
                     });
-                    
-                    const holeMat = new THREE.MeshStandardMaterial({ 
+
+                    const holeMat = new THREE.MeshStandardMaterial({
                         color: 0xB8860B,
                         roughness: 0.8
                     });
-                    
+
                     // Create giant cheese wedge using triangular prism
                     const cheeseGroup = new THREE.Group();
-                    
+
                     // Main wedge body (triangular prism)
                     const wedgeShape = new THREE.Shape();
                     wedgeShape.moveTo(-0.25, 0);
                     wedgeShape.lineTo(0.25, 0);
                     wedgeShape.lineTo(0, 0.35);
                     wedgeShape.closePath();
-                    
-                    const extrudeSettings = { 
-                        depth: 0.3, 
+
+                    const extrudeSettings = {
+                        depth: 0.3,
                         bevelEnabled: true,
                         bevelThickness: 0.01,
                         bevelSize: 0.01,
                         bevelSegments: 2
                     };
-                    
+
                     const wedgeGeo = new THREE.ExtrudeGeometry(wedgeShape, extrudeSettings);
                     const wedge = new THREE.Mesh(wedgeGeo, cheeseMat);
                     wedge.rotation.x = -Math.PI / 2;
@@ -2261,24 +2261,24 @@ export class KitchenRenderer {
                     wedge.position.set(0, 0.18, 0);
                     wedge.castShadow = true;
                     cheeseGroup.add(wedge);
-                    
+
                     // Crust on the curved edge (rind)
                     const rindCurve = new THREE.Shape();
                     rindCurve.moveTo(-0.25, 0);
                     rindCurve.lineTo(0.25, 0);
                     rindCurve.lineTo(0, 0.35);
                     rindCurve.closePath();
-                    
-                    const rindGeo = new THREE.ExtrudeGeometry(rindCurve, { 
-                        depth: 0.015, 
-                        bevelEnabled: false 
+
+                    const rindGeo = new THREE.ExtrudeGeometry(rindCurve, {
+                        depth: 0.015,
+                        bevelEnabled: false
                     });
                     const rind = new THREE.Mesh(rindGeo, crustMat);
                     rind.rotation.x = -Math.PI / 2;
                     rind.rotation.z = Math.PI / 2;
                     rind.position.set(0, 0.18, -0.16);
                     cheeseGroup.add(rind);
-                    
+
                     // Large cheese holes (scattered on visible faces)
                     const holePositions = [
                         { x: 0.08, y: 0.15, z: 0.05 },
@@ -2289,7 +2289,7 @@ export class KitchenRenderer {
                         { x: -0.08, y: 0.18, z: -0.08 },
                         { x: 0.02, y: 0.2, z: 0.1 }
                     ];
-                    
+
                     holePositions.forEach(pos => {
                         const hole = new THREE.Mesh(
                             new THREE.SphereGeometry(0.025 + Math.random() * 0.015, 8, 8),
@@ -2299,32 +2299,32 @@ export class KitchenRenderer {
                         hole.position.set(pos.x, pos.y, pos.z);
                         cheeseGroup.add(hole);
                     });
-                    
+
                     ingGroup.add(cheeseGroup);
 
                 } else if (isEggCrate) {
                     // --- EGG CRATE CONTENTS: Giant egg tray with eggs ---
-                    const cardboardMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xC8A870, 
+                    const cardboardMat = new THREE.MeshStandardMaterial({
+                        color: 0xC8A870,
                         roughness: 0.95
                     });
-                    
-                    const eggMat = new THREE.MeshStandardMaterial({ 
-                        color: 0xFFF8DC, 
+
+                    const eggMat = new THREE.MeshStandardMaterial({
+                        color: 0xFFF8DC,
                         roughness: 0.6
                     });
-                    
-                    const speckleMat = new THREE.MeshStandardMaterial({ 
+
+                    const speckleMat = new THREE.MeshStandardMaterial({
                         color: 0xD4A574,
                         transparent: true,
                         opacity: 0.4
                     });
-                    
+
                     const boxSz = this.ts * 0.35;
-                    
+
                     // Create 1 giant egg tray filling the crate
                     const trayGroup = new THREE.Group();
-                    
+
                     // Large tray base
                     const trayBase = new THREE.Mesh(
                         new THREE.BoxGeometry(0.65, 0.04, 0.55),
@@ -2332,7 +2332,7 @@ export class KitchenRenderer {
                     );
                     trayBase.position.y = 0.02;
                     trayGroup.add(trayBase);
-                    
+
                     // Tray walls
                     const wallH = 0.08;
                     // Front
@@ -2342,12 +2342,12 @@ export class KitchenRenderer {
                     );
                     frontWall.position.set(0, 0.04 + wallH / 2, 0.265);
                     trayGroup.add(frontWall);
-                    
+
                     // Back
                     const backWall = frontWall.clone();
                     backWall.position.z = -0.265;
                     trayGroup.add(backWall);
-                    
+
                     // Left
                     const leftWall = new THREE.Mesh(
                         new THREE.BoxGeometry(0.02, wallH, 0.55),
@@ -2355,12 +2355,12 @@ export class KitchenRenderer {
                     );
                     leftWall.position.set(-0.315, 0.04 + wallH / 2, 0);
                     trayGroup.add(leftWall);
-                    
+
                     // Right
                     const rightWall = leftWall.clone();
                     rightWall.position.x = 0.315;
                     trayGroup.add(rightWall);
-                    
+
                     // Egg cups and eggs (5 rows x 6 columns = 30 eggs)
                     const rows = 5;
                     const cols = 6;
@@ -2368,12 +2368,12 @@ export class KitchenRenderer {
                     const eggSpacingZ = 0.1;
                     const startX = -(cols - 1) * eggSpacingX / 2;
                     const startZ = -(rows - 1) * eggSpacingZ / 2;
-                    
+
                     for (let row = 0; row < rows; row++) {
                         for (let col = 0; col < cols; col++) {
                             const cupX = startX + col * eggSpacingX;
                             const cupZ = startZ + row * eggSpacingZ;
-                            
+
                             // Cup dimple
                             const cup = new THREE.Mesh(
                                 new THREE.SphereGeometry(0.045, 10, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
@@ -2382,7 +2382,7 @@ export class KitchenRenderer {
                             cup.position.set(cupX, 0.04, cupZ);
                             cup.rotation.x = Math.PI;
                             trayGroup.add(cup);
-                            
+
                             // Egg in cup (most cups have eggs)
                             if (Math.random() > 0.15) {
                                 const egg = new THREE.Mesh(
@@ -2393,7 +2393,7 @@ export class KitchenRenderer {
                                 egg.position.set(cupX, 0.09, cupZ);
                                 egg.castShadow = true;
                                 trayGroup.add(egg);
-                                
+
                                 // Speckles on egg
                                 for (let s = 0; s < 3; s++) {
                                     const speckle = new THREE.Mesh(
@@ -2412,7 +2412,7 @@ export class KitchenRenderer {
                             }
                         }
                     }
-                    
+
                     trayGroup.position.y = 0.08;
                     ingGroup.add(trayGroup);
 
@@ -2665,19 +2665,19 @@ export class KitchenRenderer {
 
         if (st.type === 'chopping') {
             // --- CLEAN MODERN CHOPPING STATION ---
-            
+
             // Wooden cutting board - simple and clean
             const boardGroup = new THREE.Group();
             boardGroup.name = 'choppingBoard';
 
             // Main cutting board - thick wooden block
-            const boardMat = new THREE.MeshStandardMaterial({ 
-                color: 0xB8956A, 
-                roughness: 0.75, 
+            const boardMat = new THREE.MeshStandardMaterial({
+                color: 0xB8956A,
+                roughness: 0.75,
                 metalness: 0.0
             });
             const board = new THREE.Mesh(
-                new THREE.BoxGeometry(this.ts * 0.65, 0.06, this.ts * 0.5), 
+                new THREE.BoxGeometry(this.ts * 0.65, 0.06, this.ts * 0.5),
                 boardMat
             );
             board.position.y = baseH + 0.06;
@@ -2686,8 +2686,8 @@ export class KitchenRenderer {
             boardGroup.add(board);
 
             // Simple border groove
-            const grooveMat = new THREE.MeshStandardMaterial({ 
-                color: 0x8B6F47, 
+            const grooveMat = new THREE.MeshStandardMaterial({
+                color: 0x8B6F47,
                 roughness: 0.85
             });
             const groove = new THREE.Mesh(
@@ -2699,96 +2699,89 @@ export class KitchenRenderer {
 
             group.add(boardGroup);
 
-            // Simple chef's knife - clean design
+            // Premium Japanese Nakiri Knife (Vegetable Cleaver)
             const knifeGroup = new THREE.Group();
             knifeGroup.name = 'knife';
 
-            // Handle - dark wood/plastic
-            const handleMat = new THREE.MeshStandardMaterial({ 
-                color: 0x2d2d2d, 
-                roughness: 0.5
+            // High-carbon Damascus Steel Blade
+            const bladeMat = new THREE.MeshStandardMaterial({
+                color: 0xa0a0a0,
+                metalness: 0.9,
+                roughness: 0.2
             });
-            const handle = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.025, 0.025, 0.3, 8),
-                handleMat
-            );
-            handle.rotation.z = Math.PI / 2;
-            handle.position.set(-0.15, 0, 0);
-            handle.castShadow = true;
-            knifeGroup.add(handle);
-
-            // Handle grip rings
-            const gripMat = new THREE.MeshStandardMaterial({ 
-                color: 0x1a1a1a, 
-                roughness: 0.7 
-            });
-            for (let i = 0; i < 3; i++) {
-                const ring = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.027, 0.027, 0.015, 8),
-                    gripMat
-                );
-                ring.rotation.z = Math.PI / 2;
-                ring.position.set(-0.22 + i * 0.08, 0, 0);
-                knifeGroup.add(ring);
-            }
-
-            // Blade - shiny steel
-            const bladeMat = new THREE.MeshStandardMaterial({ 
-                color: 0xDDDDDD, 
-                metalness: 0.95, 
-                roughness: 0.1
-            });
-            
-            // Main blade body
             const blade = new THREE.Mesh(
-                new THREE.BoxGeometry(0.45, 0.015, 0.15),
+                new THREE.BoxGeometry(0.4, 0.01, 0.22),
                 bladeMat
             );
-            blade.position.set(0.15, 0, 0);
+            blade.position.set(0.12, 0, 0);
             blade.castShadow = true;
             knifeGroup.add(blade);
 
-            // Blade tip (pointed end)
-            const tipGeo = new THREE.ConeGeometry(0.075, 0.12, 4);
-            const tip = new THREE.Mesh(tipGeo, bladeMat);
-            tip.rotation.z = -Math.PI / 2;
-            tip.position.set(0.43, 0, 0);
-            knifeGroup.add(tip);
-
-            // Sharp edge highlight
-            const edgeMat = new THREE.MeshStandardMaterial({ 
-                color: 0xFFFFFF, 
-                metalness: 1.0, 
+            // Sharp Beveled Edge (Shiny Silver, facing +Z)
+            const edgeMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                metalness: 1.0,
                 roughness: 0.05,
-                emissive: 0x555555,
-                emissiveIntensity: 0.1
+                emissive: 0x222222
             });
             const edge = new THREE.Mesh(
-                new THREE.BoxGeometry(0.45, 0.008, 0.152),
+                new THREE.BoxGeometry(0.405, 0.006, 0.06),
                 edgeMat
             );
-            edge.position.set(0.15, 0.01, 0);
+            edge.position.set(0.12, 0, 0.10);
             knifeGroup.add(edge);
 
-            // Bolster (metal guard)
-            const bolsterMat = new THREE.MeshStandardMaterial({ 
-                color: 0x999999, 
-                metalness: 0.8, 
-                roughness: 0.3 
+            // Granton edge dimples (prevents food from sticking)
+            const dimpleMat = new THREE.MeshStandardMaterial({
+                color: 0x777777,
+                metalness: 0.8,
+                roughness: 0.5
+            });
+            for (let i = 0; i < 4; i++) {
+                const dimple = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.015, 0.015, 0.012, 8),
+                    dimpleMat
+                );
+                dimple.rotation.x = Math.PI / 2;
+                dimple.position.set(0.0 + i * 0.07, 0, 0.04);
+                knifeGroup.add(dimple);
+            }
+
+            // Octagonal Wooden Handle (Rosewood)
+            const handleMat = new THREE.MeshStandardMaterial({
+                color: 0x2e1105,
+                roughness: 0.8
+            });
+            const handle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.035, 0.045, 0.26, 8),
+                handleMat
+            );
+            handle.rotation.z = Math.PI / 2;
+            handle.rotation.x = Math.PI / 8; // show flat face on top
+            handle.position.set(-0.21, 0, -0.02); // shifted toward spine
+            handle.castShadow = true;
+            knifeGroup.add(handle);
+
+            // Polished Brass Bolster
+            const bolsterMat = new THREE.MeshStandardMaterial({
+                color: 0xd4af37,
+                metalness: 0.9,
+                roughness: 0.2
             });
             const bolster = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.03, 0.03, 0.05, 8),
+                new THREE.CylinderGeometry(0.04, 0.037, 0.06, 8),
                 bolsterMat
             );
             bolster.rotation.z = Math.PI / 2;
-            bolster.position.set(0, 0, 0);
+            bolster.rotation.x = Math.PI / 8;
+            bolster.position.set(-0.05, 0, -0.02);
             bolster.castShadow = true;
             knifeGroup.add(bolster);
 
-            // Position knife - resting beside board
+            // Position knife - resting gently beside board
             knifeGroup.position.set(this.ts * 0.25, baseH + 0.1, -this.ts * 0.2);
             knifeGroup.rotation.x = 0;
-            knifeGroup.rotation.y = 0.3; // Slight angle
+            knifeGroup.rotation.y = 0.3; // Slight angle resting
             knifeGroup.rotation.z = 0;
             knifeGroup.castShadow = true;
             group.add(knifeGroup);
@@ -3061,14 +3054,14 @@ export class KitchenRenderer {
             // Load the recycle image texture
             const textureLoader = new THREE.TextureLoader();
             const recycleTexture = textureLoader.load('/assets/triangular-arrows-sign-for-recycle.png');
-            
-            const recycleMat = new THREE.MeshStandardMaterial({ 
+
+            const recycleMat = new THREE.MeshStandardMaterial({
                 map: recycleTexture,
                 transparent: true,
                 roughness: 0.3,
                 metalness: 0.2
             });
-            
+
             // Create sticker mesh (circular) on top of lid
             const stickerSize = sz * 0.35;
             const recycleSticker = new THREE.Mesh(
@@ -3186,24 +3179,24 @@ export class KitchenRenderer {
             water.name = 'sinkWater';
             group.add(water);
 
-            // Faucet pipe (vertical)
+            // Faucet pipe (vertical) at the back
             const pipeMat = new THREE.MeshStandardMaterial({ color: 0xC0C0C0, metalness: 0.8, roughness: 0.2 });
             const pipeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6, 12);
             const pipe = new THREE.Mesh(pipeGeo, pipeMat);
-            pipe.position.set(0, baseH + 0.4, this.ts * 0.3);
+            pipe.position.set(0, baseH + 0.4, -this.ts * 0.35); // Move to the BACK
             group.add(pipe);
 
             // Faucet spout (curved pipe)
             const spoutGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.3, 12);
             const spout = new THREE.Mesh(spoutGeo, pipeMat);
-            spout.rotation.x = Math.PI / 2.5; // Curving forward again
-            spout.position.set(0, baseH + 0.65, this.ts * 0.15); // At the FRONT
+            spout.rotation.x = -Math.PI / 2.5; // Curving backward properly into sink
+            spout.position.set(0, baseH + 0.65, -this.ts * 0.2);
             group.add(spout);
 
             // Faucet tip (nozzle)
             const nozzleGeo = new THREE.CylinderGeometry(0.02, 0.035, 0.08, 8);
             const nozzle = new THREE.Mesh(nozzleGeo, pipeMat);
-            nozzle.position.set(0, baseH + 0.55, 0);
+            nozzle.position.set(0, baseH + 0.55, -0.05);
             group.add(nozzle);
 
             // Handles (left/right knobs)
@@ -3211,9 +3204,9 @@ export class KitchenRenderer {
             const knobMatR = new THREE.MeshStandardMaterial({ color: 0xe74c3c, metalness: 0.5 });
             const knobMatB = new THREE.MeshStandardMaterial({ color: 0x3498db, metalness: 0.5 });
             const knobL = new THREE.Mesh(knobGeo, knobMatR);
-            knobL.position.set(-0.15, baseH + 0.45, this.ts * 0.3);
+            knobL.position.set(-0.15, baseH + 0.45, -this.ts * 0.35); // Back left
             const knobR = new THREE.Mesh(knobGeo, knobMatB);
-            knobR.position.set(0.15, baseH + 0.45, this.ts * 0.3);
+            knobR.position.set(0.15, baseH + 0.45, -this.ts * 0.35); // Back right
             group.add(knobL, knobR);
 
             this.stationEffects[st.id] = { water, waterMat };
@@ -3503,88 +3496,99 @@ export class KitchenRenderer {
         const isDoneChop = stationData.chopProgress >= 100 ||
             (stationData.contents && stationData.contents.type === 'ingredient' && stationData.contents.chopped);
 
-        if (stationData.chopProgress > 0 || isDoneChop) {
-            const existBar = ui.getObjectByName('chopBar');
-            if (existBar) ui.remove(existBar);
-            const existBg = ui.getObjectByName('chopBarBg');
-            if (existBg) ui.remove(existBg);
-            const existBorder = ui.getObjectByName('chopBarBorder');
-            if (existBorder) ui.remove(existBorder);
+        // Manage progress bar items cleanly without duplication
+        const barObjs = ['chopBarGroup', 'chopBar', 'chopBarBg', 'chopBarBorder'];
 
-            if (!isDoneChop) {
-                // Background
-                const bgGeo = new THREE.BoxGeometry(this.ts * 0.82, 0.12, 0.18);
-                const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5 });
-                const bg = new THREE.Mesh(bgGeo, bgMat);
-                bg.name = 'chopBarBg';
-                bg.position.set(0, 1.5, -0.6);
-                ui.add(bg);
-                
-                // Border for depth
-                const borderGeo = new THREE.BoxGeometry(this.ts * 0.84, 0.14, 0.19);
-                const borderMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.6 });
-                const border = new THREE.Mesh(borderGeo, borderMat);
-                border.name = 'chopBarBorder';
-                border.position.set(0, 1.5, -0.61);
-                ui.add(border);
+        if (stationData.chopProgress > 0 && !isDoneChop) {
+            // Actively chopping - remove old items out of caution
+            barObjs.forEach(n => {
+                const exist = ui.getObjectByName(n);
+                if (exist) ui.remove(exist);
+            });
+            // Hide ready icon if present
+            const oldReady = ui.getObjectByName('readyIcon');
+            if (oldReady) ui.remove(oldReady);
 
-                // Progress bar with gradient effect
-                const p = Math.min(stationData.chopProgress / 100, 1.0);
-                const barGeo = new THREE.BoxGeometry(this.ts * 0.8 * p, 0.08, 0.15);
-                
-                // Color transitions: yellow -> lime green -> bright green
-                const barColor = new THREE.Color();
-                if (p < 0.5) {
-                    barColor.setHSL(0.15 + p * 0.2, 0.95, 0.5); // Yellow to lime
-                } else {
-                    barColor.setHSL(0.25 + p * 0.15, 0.9, 0.45 + p * 0.1); // Lime to green
-                }
-                
-                const barMat = new THREE.MeshBasicMaterial({ 
-                    color: barColor,
-                    transparent: true,
-                    opacity: 0.9
-                });
-                const bar = new THREE.Mesh(barGeo, barMat);
-                bar.name = 'chopBar';
-                bar.position.set(-this.ts * 0.4 * (1 - p), 1.5, -0.6);
-                ui.add(bar);
-                
-                // Add shine effect when near completion
-                if (p > 0.8) {
-                    const shineGeo = new THREE.BoxGeometry(this.ts * 0.8 * p, 0.04, 0.16);
-                    const shineMat = new THREE.MeshBasicMaterial({ 
-                        color: 0xFFFFFF, 
-                        transparent: true, 
-                        opacity: (p - 0.8) * 2 * 0.4 
-                    });
-                    const shine = new THREE.Mesh(shineGeo, shineMat);
-                    shine.position.set(-this.ts * 0.4 * (1 - p), 1.54, -0.6);
-                    ui.add(shine);
-                }
-            }
+            const barGroup = new THREE.Group();
+            barGroup.name = 'chopBarGroup';
+            barGroup.position.set(0, 1.6, -0.6); // slightly higher to see under knife clearly
+            ui.add(barGroup);
 
-            if (isDoneChop && stationData.contents && stationData.type === 'chopping') {
-                const existReady = ui.getObjectByName('readyIcon');
-                if (!existReady) {
-                    this.addLabel(ui, '✅', 1.8);
-                    const newReady = ui.children[ui.children.length - 1];
-                    newReady.name = 'readyIcon';
-                    newReady.scale.set(1.5, 1.5, 1);
-                }
+            // Modern Sleek Background
+            const bgW = this.ts * 0.8;
+            const bgGeo = new THREE.BoxGeometry(bgW, 0.14, 0.1);
+            const bgMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.8 });
+            const bg = new THREE.Mesh(bgGeo, bgMat);
+            barGroup.add(bg);
+
+            // Subdued Outer Border/Glow for pop without clipping
+            const borderGeo = new THREE.BoxGeometry(bgW + 0.04, 0.18, 0.12);
+            const borderMat = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.6 });
+            const border = new THREE.Mesh(borderGeo, borderMat);
+            border.position.z = -0.01;
+            barGroup.add(border);
+
+            // Progress Bar Fill
+            const p = Math.min(stationData.chopProgress / 100, 1.0);
+            const fillW = Math.max(0.01, (bgW - 0.04) * p); // Ensure width is not literally 0
+
+            // Neon Color Transition (Red -> Yellow -> Green)
+            const barColor = new THREE.Color();
+            if (p < 0.3) {
+                barColor.setHex(0xff3333).lerp(new THREE.Color(0xffaa00), p / 0.3);
+            } else if (p < 0.7) {
+                barColor.setHex(0xffaa00).lerp(new THREE.Color(0xccff00), (p - 0.3) / 0.4);
             } else {
-                const existReady = ui.getObjectByName('readyIcon');
-                if (existReady) ui.remove(existReady);
+                barColor.setHex(0xccff00).lerp(new THREE.Color(0x00ff00), (p - 0.7) / 0.3);
             }
+
+            const barGeo = new THREE.BoxGeometry(fillW, 0.1, 0.12);
+            const barMat = new THREE.MeshBasicMaterial({ color: barColor });
+            const bar = new THREE.Mesh(barGeo, barMat);
+
+            // Align correctly from the left
+            const startX = -(bgW - 0.04) / 2;
+            bar.position.set(startX + (fillW / 2), 0, 0.01);
+
+            // Smooth pulse effect applied to the bar alone for energy
+            const pulse = 1.0 + Math.sin(Date.now() * 0.02) * 0.05;
+            bar.scale.set(1, pulse, 1);
+            barGroup.add(bar);
+
+            // 3D Glassy Highlight Shine
+            const shineGeo = new THREE.BoxGeometry(fillW, 0.03, 0.13);
+            const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+            const shine = new THREE.Mesh(shineGeo, shineMat);
+            shine.position.set(0, 0.035, 0);
+            bar.add(shine);
 
             const contentMesh = sm.group.getObjectByName('contents');
-            if (contentMesh && stationData.chopProgress < 100 && stationData.chopProgress > 0) {
-                contentMesh.scale.x = 1 + Math.sin(Date.now() * 0.05) * 0.1;
+            if (contentMesh) {
+                const intenseShake = 1 + Math.sin(Date.now() * 0.08) * 0.15;
+                contentMesh.scale.set(intenseShake, 1 + Math.cos(Date.now() * 0.08) * 0.1, intenseShake);
+            }
+        } else if (isDoneChop && stationData.contents && stationData.type === 'chopping') {
+            // Reached 100%, clean up progress bar completely
+            barObjs.forEach(n => {
+                const exist = ui.getObjectByName(n);
+                if (exist) ui.remove(exist);
+            });
+
+            const existReady = ui.getObjectByName('readyIcon');
+            if (!existReady) {
+                this.addLabel(ui, '✅', 1.8);
+                const newReady = ui.children[ui.children.length - 1];
+                newReady.name = 'readyIcon';
+                newReady.scale.set(1.5, 1.5, 1);
             }
         } else {
-            const existBar = ui.getObjectByName('chopBar'); if (existBar) ui.remove(existBar);
-            const existBg = ui.getObjectByName('chopBarBg'); if (existBg) ui.remove(existBg);
-            const existReady = ui.getObjectByName('readyIcon'); if (existReady) ui.remove(existReady);
+            // Nothing going on, remove everything
+            barObjs.forEach(n => {
+                const exist = ui.getObjectByName(n);
+                if (exist) ui.remove(exist);
+            });
+            const oldReady = ui.getObjectByName('readyIcon');
+            if (oldReady) ui.remove(oldReady);
         }
 
         // --- ROLLING PROGRESS BAR LOGIC ---
@@ -5643,6 +5647,64 @@ export class KitchenRenderer {
                     group.add(leaf);
                 }
             }
+
+            // --- SUGGEST NEXT INGREDIENT (Floating Sprite) ---
+            if (this.config && this.config.RECIPES) {
+                // If it's NOT a full recipe, NOT burnt, and NOT empty
+                if (!isRecipe && !content.burnt && ings.length > 0) {
+                    let bestMissing = null;
+                    // Find a recipe that CAN be made from current ingredients
+                    for (const [, recipe] of Object.entries(this.config.RECIPES)) {
+                        const required = recipe.ingredients;
+                        // Check if current plate is a valid subset of this recipe
+                        if (ings.every(ing => required.includes(ing)) && ings.length < required.length) {
+                            // Find the first missing ingredient to suggest
+                            bestMissing = required.find(ing => !ings.includes(ing));
+                            break; // Suggest the first one we find
+                        }
+                    }
+
+                    if (bestMissing && this.config && this.config.INGREDIENTS) {
+                        const ingConfig = this.config.INGREDIENTS[bestMissing];
+                        if (ingConfig) {
+                            const iconStr = ingConfig.emoji || bestMissing;
+
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 128; canvas.height = 128;
+                            const ctx = canvas.getContext('2d');
+
+                            // Bubble background
+                            ctx.fillStyle = 'rgba(20, 20, 20, 0.65)';
+                            ctx.beginPath();
+                            ctx.arc(64, 64, 54, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            // Border
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                            ctx.lineWidth = 4;
+                            ctx.stroke();
+
+                            // Emoji text
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = 'bold 44px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(`+ ${iconStr}`, 64, 70);
+
+                            const tex = new THREE.CanvasTexture(canvas);
+                            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+                            const sprite = new THREE.Sprite(mat);
+
+                            // Position above food
+                            sprite.position.set(0, finalHeight + 0.45, 0);
+                            sprite.scale.set(0.6, 0.6, 0.6);
+                            sprite.name = 'suggestionSprite';
+
+                            group.add(sprite);
+                        }
+                    }
+                }
+            }
         }
         return group;
     }
@@ -5934,6 +5996,14 @@ export class KitchenRenderer {
                     }
                 }
             }
+
+            // --- ANIMATE SUGGESTION SPRITE ---
+            if (contents) {
+                const suggestion = contents.getObjectByName('suggestionSprite');
+                if (suggestion) {
+                    suggestion.position.y += Math.sin(this.animTime * 4) * 0.002;
+                }
+            }
         });
 
         // Animate chopping knives
@@ -5943,32 +6013,51 @@ export class KitchenRenderer {
                 const now = Date.now();
                 const isChopping = sm.lastChopUpdate && (now - sm.lastChopUpdate) < 300;
                 if (isChopping) {
-                    const angle = now * 0.04;
-                    const chopCycle = Math.sin(angle);
-                    
-                    // Knife moves to center of board and chops
+                    // Create a sharp swift chopping cycle (0 to 1 repeatedly)
+                    const cycleSpeed = 300; // 300ms per chop
+                    const t = (now % cycleSpeed) / cycleSpeed;
+
+                    // Swift up, BAM down
+                    let lift = 0;
+                    let isImpact = false;
+                    if (t < 0.6) {
+                        // Lifting slowly
+                        lift = Math.sin((t / 0.6) * (Math.PI / 2));
+                    } else {
+                        // Slamming down fast
+                        lift = 1.0 - Math.pow((t - 0.6) / 0.4, 3);
+                        if (t > 0.85) isImpact = true;
+                    }
+
+                    // Knife moves to center of board while chopping
                     const restX = this.ts * 0.25;
                     const restZ = -this.ts * 0.2;
-                    const chopX = 0; // Center of board
-                    const chopZ = 0; // Center of board
-                    
-                    // Interpolate position - move to center when chopping
-                    const moveProgress = Math.max(0, chopCycle); // 0 to 1
-                    knife.position.x = restX + (chopX - restX) * moveProgress;
-                    knife.position.z = restZ + (chopZ - restZ) * moveProgress;
-                    
-                    // Up-down chopping motion
-                    const height = Math.abs(chopCycle) * 0.5;
-                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.15) + height;
-                    
-                    // Rotate knife for chopping motion
-                    knife.rotation.x = chopCycle * 0.4; // Tilt forward/back
-                    knife.rotation.y = 0.3 + moveProgress * -0.3; // Straighten when chopping
-                    knife.rotation.z = chopCycle * 0.1; // Slight roll
-                    
-                    // Impact effect when knife hits board
-                    if (chopCycle < -0.9) {
-                        knife.position.y -= 0.03;
+                    const chopX = -0.1; // Shift left so blade tip hits center
+                    const chopZ = 0;
+
+                    knife.position.x = restX + (chopX - restX) * 0.8;
+                    knife.position.z = restZ + (chopZ - restZ) * 0.8;
+
+                    // Up-down high arching chop motion
+                    const height = lift * 0.7;
+                    knife.position.y = (sm.baseMesh.position.y * 2 + 0.25) + height;
+
+                    // Make it face the board away from the character standing in front.
+                    // X-axis: 0 means it lies flat, Math.PI / 2 means blade edge faces down
+                    // Y-axis: Math.PI/2 faces it forward into the table (away from player)
+                    // Z-axis: controls the chop tilt
+
+                    const chopTilt = (lift - 0.5) * 1.8;
+                    knife.rotation.set(
+                        Math.PI / 2, // Edge faces table
+                        -Math.PI / 2,  // Handle toward player (bottom right of screen), tip toward board
+                        -chopTilt // Tilt the handle vs tip
+                    );
+
+                    // Hard hit on the board
+                    if (isImpact) {
+                        knife.position.y -= 0.1; // Thunk down into board
+                        knife.rotation.z += 0.6; // Tip points forcefully down, snapping!
                     }
 
                     if (!sm.chopParticles) {
@@ -5976,58 +6065,67 @@ export class KitchenRenderer {
                         sm.particleGroup = new THREE.Group();
                         sm.group.add(sm.particleGroup);
                     }
-                    
+
                     const content = sm.group.getObjectByName('contents');
-                    
-                    // Spawn particles on impact
-                    if (content && chopCycle < -0.85 && Math.random() < 0.6) {
+
+                    // Explosive particle burst on impact!
+                    if (content && isImpact && Math.random() < 0.8) {
                         const ingMesh = content.children[0];
                         const color = (ingMesh && ingMesh.material) ? ingMesh.material.color : 0xffffff;
-                        
-                        for (let i = 0; i < 2; i++) {
-                            const size = 0.04 + Math.random() * 0.04;
-                            const p = new THREE.Mesh(
-                                new THREE.BoxGeometry(size, size, size), 
-                                new THREE.MeshBasicMaterial({ color, transparent: true })
-                            );
+
+                        // Spawn more particles for visual satisfaction
+                        for (let i = 0; i < 4; i++) {
+                            const size = 0.03 + Math.random() * 0.05;
+                            const pmat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+                            const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), pmat);
                             p.position.set(
-                                (Math.random() - 0.5) * 0.15, 
-                                (sm.baseMesh.position.y * 2 + 0.35), 
-                                (Math.random() - 0.5) * 0.15
+                                (Math.random() - 0.5) * 0.2,
+                                (sm.baseMesh.position.y * 2 + 0.35),
+                                (Math.random() - 0.5) * 0.2
                             );
-                            p.userData = { 
-                                vx: (Math.random() - 0.5) * 5, 
-                                vy: 2.5 + Math.random() * 3.5, 
-                                vz: (Math.random() - 0.5) * 5, 
-                                life: 0.7,
-                                spin: (Math.random() - 0.5) * 10
+
+                            // Fly outwards aggressively
+                            const angleSpread = Math.random() * Math.PI * 2;
+                            const speed = 3 + Math.random() * 5;
+                            p.userData = {
+                                vx: Math.cos(angleSpread) * speed,
+                                vy: 3 + Math.random() * 6, // High arc
+                                vz: Math.sin(angleSpread) * speed,
+                                life: 0.9,
+                                spin: (Math.random() - 0.5) * 20
                             };
                             sm.particleGroup.add(p);
                             sm.chopParticles.push(p);
                         }
                     }
-                    
-                    // Ingredient shake effect
+
+                    // Chaotic shaking of the ingredient on impact
                     if (content) {
-                        const shake = Math.abs(chopCycle) > 0.85 ? 0.25 : 0.1;
-                        content.scale.setScalar(1 + Math.sin(angle * 4) * shake);
-                        content.position.x = Math.sin(angle * 12) * 0.05;
-                        content.position.z = Math.cos(angle * 12) * 0.05;
-                        content.rotation.y = Math.sin(angle * 8) * 0.15;
+                        if (isImpact) {
+                            content.scale.setScalar(0.8 + Math.random() * 0.4);
+                            content.position.x = (Math.random() - 0.5) * 0.2;
+                            content.position.z = (Math.random() - 0.5) * 0.2;
+                            content.rotation.y += (Math.random() - 0.5) * 0.5;
+                        } else {
+                            // Settle back down
+                            content.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
+                            content.position.x *= 0.5;
+                            content.position.z *= 0.5;
+                        }
                     }
                 } else {
                     // Smooth return to rest position beside board
                     const restX = this.ts * 0.25;
                     const restY = sm.baseMesh.position.y * 2 + 0.1;
                     const restZ = -this.ts * 0.2;
-                    
+
                     knife.position.x += (restX - knife.position.x) * 0.12;
                     knife.position.y += (restY - knife.position.y) * 0.12;
                     knife.position.z += (restZ - knife.position.z) * 0.12;
-                    knife.rotation.x *= 0.85;
+                    // Reset to gentle lying angle (lying flat on X/Z, slightly rotated on Y)
+                    knife.rotation.x += (0 - knife.rotation.x) * 0.12;
                     knife.rotation.y += (0.3 - knife.rotation.y) * 0.12;
-                    knife.rotation.z *= 0.85;
-                    
+                    knife.rotation.z += (0 - knife.rotation.z) * 0.12;
                     // Reset content position
                     const content = sm.group.getObjectByName('contents');
                     if (content) {
@@ -6060,34 +6158,34 @@ export class KitchenRenderer {
             if (sm.chopParticles) {
                 for (let i = sm.chopParticles.length - 1; i >= 0; i--) {
                     const p = sm.chopParticles[i];
-                    
+
                     // Physics with air resistance
                     p.position.x += p.userData.vx * delta;
                     p.position.y += p.userData.vy * delta;
                     p.position.z += p.userData.vz * delta;
-                    
+
                     // Gravity
                     p.userData.vy -= 18 * delta;
-                    
+
                     // Air resistance
                     p.userData.vx *= (1 - 2 * delta);
                     p.userData.vz *= (1 - 2 * delta);
-                    
+
                     // Rotation for tumbling effect
                     if (p.userData.spin) {
                         p.rotation.x += p.userData.spin * delta;
                         p.rotation.y += p.userData.spin * 0.7 * delta;
                         p.rotation.z += p.userData.spin * 0.5 * delta;
                     }
-                    
+
                     // Fade out
                     p.userData.life -= delta;
                     p.material.opacity = Math.max(0, p.userData.life / 0.7);
-                    
+
                     // Slight scale change
                     const scale = 1 - (1 - p.userData.life / 0.7) * 0.3;
                     p.scale.setScalar(scale);
-                    
+
                     // Remove when done
                     if (p.userData.life <= 0 || p.position.y < 0) {
                         sm.particleGroup.remove(p);

@@ -551,6 +551,9 @@
                         <i class="bi bi-stopwatch timer-icon"></i>
                         <span class="timer-value" id="timer-value">3:00</span>
                     </div>
+                    <button class="hud-menu-btn" id="hud-menu-btn" onclick="togglePauseMenu()" title="Menu">
+                        <i class="bi bi-list"></i>
+                    </button>
                     <div class="hud-combo" id="hud-combo">
                         <span id="combo-value"></span>
                     </div>
@@ -639,10 +642,7 @@
             <div class="recipe-list" id="recipe-list"></div>
         </div>
 
-        <!-- Guide Book (toggle) -->
-        <button class="btn-guide-toggle" id="btn-guide-toggle" title="Cooking Guide">
-            <i class="bi bi-info-circle-fill"></i>
-        </button>
+        <!-- Guide Book (toggle) - opened from menu -->
         <div class="guide-book hidden" id="guide-book">
             <div class="guide-book-header">
                 <h3><i class="bi bi-info-circle-fill"></i> Cooking Guide</h3>
@@ -654,15 +654,30 @@
             </div>
         </div>
 
-        <!-- PAUSE MENU (Host only) -->
+        <!-- GAME MENU (Burger menu) -->
         <div id="pause-menu" class="pause-menu hidden">
             <div class="pause-content">
-                <h2><i class="bi bi-pause-circle"></i> Paused</h2>
+                <h2><i class="bi bi-list"></i> Menu</h2>
+                <div class="pause-settings-section"
+                    style="margin-bottom: 20px; text-align: left; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
+                    <label
+                        style="display: block; font-size: 11px; color: var(--accent); margin-bottom: 8px; font-weight: bold; text-transform: uppercase;">
+                        <i class="bi bi-camera-video-fill"></i> Camera Height
+                    </label>
+                    <select id="camera-height-setting" onchange="setCameraHeight(this.value)"
+                        style="width: 100%; background: rgba(0,0,0,0.4); color: white; border: 1px solid var(--border); padding: 10px; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 14px; cursor: pointer; outline: none;">
+                        <option value="high">High (Normal)</option>
+                        <option value="low">Low (Closer Perspective)</option>
+                    </select>
+                </div>
                 <button id="btn-resume" class="btn-primary" onclick="resumeGame()"><i class="bi bi-play-fill"></i>
                     Resume</button>
+                <button class="btn-info"
+                    onclick="document.getElementById('guide-book').classList.toggle('hidden'); resumeGame();"><i
+                        class="bi bi-info-circle-fill"></i>
+                    Cooking Guide</button>
                 <button id="btn-leave" class="btn-secondary" onclick="leaveRoom()"><i class="bi bi-box-arrow-left"></i>
-                    Leave
-                    Game</button>
+                    Leave Game</button>
             </div>
         </div>
     </div>
